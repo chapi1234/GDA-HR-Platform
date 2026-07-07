@@ -1,36 +1,52 @@
+import {
+  buildEmailHtml,
+  detailPanel,
+  escapeHtml,
+  getPortalLoginUrl,
+  withEmailDefaults,
+} from "./emailTemplate.js";
+
 export default function getLoginMailOptions(email, name) {
-  return {
-    from: process.env.EMAIL,
+  const portalUrl = getPortalLoginUrl();
+  const loginTime = new Date().toLocaleString("en-US", {
+    dateStyle: "full",
+    timeStyle: "short",
+  });
+
+  const contentHtml = `
+    <p>Hello <strong>${escapeHtml(name)}</strong>,</p>
+    <p>
+      This is a security notification to let you know that your GammoDA HR System account
+      was accessed successfully.
+    </p>
+    ${detailPanel("Login Activity", [
+      { label: "Account", value: escapeHtml(email) },
+      { label: "Signed in at", value: escapeHtml(loginTime) },
+      { label: "Status", value: "Login successful" },
+    ])}
+    <p>If this login was made by you, no further action is required.</p>
+    <p>If you do not recognize this activity:</p>
+    <ol class="steps">
+      <li>Sign in and change your password from the account settings page.</li>
+      <li>Use the "Forgot password" option on the sign-in page if you cannot access your account.</li>
+      <li>Contact HR if you suspect unauthorized access.</li>
+    </ol>
+    <p style="text-align:center;">
+      <a class="button" href="${escapeHtml(portalUrl)}">Open Sign-In Page</a>
+    </p>
+    <div class="notice">
+      GammoDA will never ask for your password by email. Keep your credentials private.
+    </div>
+  `;
+
+  return withEmailDefaults({
     to: email,
-    subject: "Gammoda HR-System Login Notification",
-    html: `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Login Notification</title>
-  <style>
-    body { font-family: Arial, sans-serif; background: #f6f8fa; margin: 0; padding: 0; }
-    .container { max-width: 500px; margin: 40px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 32px; }
-    .header { text-align: center; }
-    .title { font-size: 1.5rem; color: #1976d2; margin: 16px 0 8px; }
-    .content { color: #333; font-size: 1rem; margin-bottom: 24px; text-align: center; }
-    .footer { color: #888; font-size: 0.9rem; text-align: center; margin-top: 32px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <div class="title">Login Notification</div>
-    </div>
-    <div class="content">
-      <p>Hi <strong>${name}</strong>,</p>
-      <p>Your account was just accessed. If this was not you, please reset your password immediately.</p>
-    </div>
-    <div class="footer">
-      &copy; 2025 GammoDA HR System. All rights reserved.
-    </div>
-  </div>
-</body>
-</html>`,
-  };
+    subject: "GammoDA HR System - Login Notification",
+    html: buildEmailHtml({
+      title: "Login Notification",
+      preheader: "Your GammoDA HR account was accessed.",
+      contentHtml,
+      accent: "#1565c0",
+    }),
+  });
 }

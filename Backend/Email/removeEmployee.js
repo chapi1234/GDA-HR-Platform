@@ -1,44 +1,56 @@
+import {
+  buildEmailHtml,
+  detailPanel,
+  escapeHtml,
+  withEmailDefaults,
+} from "./emailTemplate.js";
+
 export default function getRemoveEmployeeMailOptions(
   email,
   name,
   position,
   department
 ) {
-  return {
-    from: process.env.EMAIL,
+  const effectiveDate = new Date().toLocaleDateString("en-US", {
+    dateStyle: "full",
+  });
+
+  const contentHtml = `
+    <p>Dear <strong>${escapeHtml(name)}</strong>,</p>
+    <p>
+      This message confirms that your access to the Gammo Development Association HR System
+      has been deactivated as part of an account removal or offboarding process.
+    </p>
+    ${detailPanel("Account Removal Details", [
+      { label: "Employee Name", value: escapeHtml(name) },
+      { label: "Work Email", value: escapeHtml(email) },
+      { label: "Last Position", value: escapeHtml(position || "Not specified") },
+      { label: "Department", value: escapeHtml(department || "Not specified") },
+      { label: "Effective Date", value: escapeHtml(effectiveDate) },
+      { label: "Portal Access", value: "Disabled" },
+    ])}
+    <p>
+      You will no longer be able to sign in to the employee portal, submit leave requests,
+      or access payroll records through this system.
+    </p>
+    <p>
+      If you believe this action was taken in error, or if you need assistance with final
+      HR documentation, please contact the HR department as soon as possible.
+    </p>
+    <div class="notice">
+      Thank you for your service with Gammo Development Association. We wish you success
+      in your future endeavors.
+    </div>
+  `;
+
+  return withEmailDefaults({
     to: email,
-    subject: "GammoDA HR-System Account Removal Notification",
-    html: `<!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8">
-        <title>Account Removal Notification</title>
-        <style>
-          body { font-family: Arial, sans-serif; background: #f6f8fa; margin: 0; padding: 0; }
-          .container { max-width: 500px; margin: 40px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 32px; }
-          .header { text-align: center; }
-          .title { font-size: 1.5rem; color: #d32f2f; margin: 16px 0 8px; }
-          .logo { margin: 0 auto 16px; display: block; border-radius: 8px; width: 80px; height: 80px; object-fit: cover; }
-          .content { color: #333; font-size: 1rem; margin-bottom: 24px; text-align: center; }
-          .footer { color: #888; font-size: 0.9rem; text-align: center; margin-top: 32px; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <img src="http://localhost:5000/assets/download.jpg" alt="GammoDA Logo" class="logo" />
-            <div class="title">Account Removal Notification</div>
-          </div>
-          <div class="content">
-            <p>Dear <strong>${name}</strong>,</p>
-            <p>Your account as <strong>${position}</strong> in <strong>${department}</strong> has been removed from the GammoDA HR System.</p>
-            <p>If you have any questions, please contact HR.</p>
-          </div>
-          <div class="footer">
-            &copy; 2025 GammoDA HR System. All rights reserved.
-          </div>
-        </div>
-      </body>
-      </html>`,
-  };
+    subject: "GammoDA HR System - Account Removal Notification",
+    html: buildEmailHtml({
+      title: "Account Removal Notice",
+      preheader: "Your GammoDA HR system access has been deactivated.",
+      contentHtml,
+      accent: "#c62828",
+    }),
+  });
 }

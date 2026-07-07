@@ -2,6 +2,13 @@ import mongoose from "mongoose";
 
 const connectDB = async () => {
   try {
+    if (!process.env.MONGODB_URI) {
+      console.error(
+        "MONGODB_URI is not set. Add MONGODB_URI to Backend/.env and restart the server."
+      );
+      process.exit(1);
+    }
+
     mongoose.connection.on("connected", () => {
       console.log("MongoDB Connected");
     });

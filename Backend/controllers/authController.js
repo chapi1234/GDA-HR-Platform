@@ -7,7 +7,7 @@ import getLoginMailOptions from "../Email/login.js";
 import getRegisterMailOptions from "../Email/register.js";
 import getPasswordResetMailOptions from "../Email/password.js";
 import getPasswordChangeConfirmationMailOptions from "../Email/passwordReset.js";
-import transporter from "../Email/nodemailer.js";
+import { sendEmail } from "../Email/sendEmail.js";
 import { recalcDepartmentStats } from "../utils/departmentStats.js";
 
 export const register = async (req, res) => {
@@ -59,16 +59,7 @@ export const register = async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    transporter.sendMail(
-      getRegisterMailOptions(user.email, user.name),
-      (err, info) => {
-        if (err) {
-          console.error("Error sending email:", err);
-        } else {
-          console.log("Email sent:", info.response);
-        }
-      }
-    );
+    await sendEmail(getRegisterMailOptions(user.email, user.name));
 
     // Return populated user for client convenience
     const populated = await Employee.findById(user._id).populate({ path: 'department', select: 'name' });
@@ -128,16 +119,7 @@ export const login = async (req, res) => {
       }
     );
 
-    transporter.sendMail(
-      getLoginMailOptions(user.email, user.name),
-      (err, info) => {
-        if (err) {
-          console.error("Error sending email:", err);
-        } else {
-          console.log("Email sent:", info.response);
-        }
-      }
-    );
+    await sendEmail(getLoginMailOptions(user.email, user.name));
 
     res.status(200).json({
       status: true,
@@ -181,16 +163,16 @@ export const forgetPasswordRequest = async (req, res) => {
     user.otpExpiry = Date.now() + 10 * 60 * 1000;
     await user.save();
 
-    transporter.sendMail(
-      getPasswordResetMailOptions(user.email, user.name, user.otp),
-      (err, info) => {
-        if (err) {
-          console.error("Error sending email:", err);
-        } else {
-          console.log("Email sent:", info.response);
-        }
-      }
+    const emailResult = await sendEmail(
+      getPasswordResetMailOptions(user.email, user.name, user.otp)
     );
+
+    if (!emailResult.sent) {
+      return res.status(500).json({
+        status: false,
+        message: "Failed to send OTP email. Please try again.",
+      });
+    }
 
     res.status(200).json({
       status: true,
@@ -302,15 +284,8 @@ export const resetPassword = async (req, res) => {
     user.password = hashedPassword;
     await user.save();
 
-    transporter.sendMail(
-      getPasswordChangeConfirmationMailOptions(user.email, user.name),
-      (err, info) => {
-        if (err) {
-          console.error("Error sending email:", err);
-        } else {
-          console.log("Email sent:", info.response);
-        }
-      }
+    await sendEmail(
+      getPasswordChangeConfirmationMailOptions(user.email, user.name)
     );
 
     res.status(200).json({
@@ -365,15 +340,8 @@ export const changePassword = async (req, res) => {
     user.password = hashedPassword;
     await user.save();
 
-    transporter.sendMail(
-      getPasswordChangeConfirmationMailOptions(user.email, user.name),
-      (err, info) => {
-        if (err) {
-          console.error("Error sending email:", err);
-        } else {
-          console.log("Email sent:", info.response);
-        }
-      }
+    await sendEmail(
+      getPasswordChangeConfirmationMailOptions(user.email, user.name)
     );
 
     res.status(200).json({

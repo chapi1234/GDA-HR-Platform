@@ -1,9 +1,9 @@
 import Employee from "../models/Employee.js";
 import Department from "../models/Department.js";
 import getRemoveEmployeeMailOptions from "../Email/removeEmployee.js";
-import bcrypt from "bcryptjs";
-import transporter from "../Email/nodemailer.js";
 import getAddEmployeeMailOptions from "../Email/addEmployee.js";
+import bcrypt from "bcryptjs";
+import { sendEmail } from "../Email/sendEmail.js";
 import { recalcDepartmentStats } from "../utils/departmentStats.js";
 
 const toId = (val) => {
@@ -163,9 +163,9 @@ export const createEmployee = async (req, res) => {
     // Increment department employee count
   await Department.findByIdAndUpdate(depDoc._id, { $inc: { employeeCount: 1 } });
   // Recalculate average salary for department
-  await recalcDepartmentStats(depDoc._id);
+    await recalcDepartmentStats(depDoc._id);
 
-    transporter.sendMail(
+    const emailResult = await sendEmail(
       getAddEmployeeMailOptions(
         user.email,
         user.name,
@@ -173,15 +173,9 @@ export const createEmployee = async (req, res) => {
         depDoc.name,
         user.salary,
         password
-      ),
-      (err, info) => {
-        if (err) {
-          console.error("Error sending email:", err);
-        } else {
-          console.log("Email sent:", info.response);
-        }
-      }
+      )
     );
+
     // Map to frontend shape
     const mapped = {
       id: user._id,
@@ -199,7 +193,17 @@ export const createEmployee = async (req, res) => {
       employeeId: user.employeeId || '',
       role: user.role || 'employee',
     };
-    res.status(201).json({ status: true, message: "Employee created successfully", data: mapped });
+    res.status(201).json({
+      status: true,
+      message: emailResult.sent
+        ? "Employee created successfully. Welcome email was accepted by the mail server."
+        : "Employee created successfully, but the welcome email could not be sent.",
+      emailSent: emailResult.sent,
+      emailNotice: emailResult.sent
+        ? `Welcome email queued for ${user.email}. Ask them to check inbox and spam.`
+        : emailResult.error || "Welcome email failed to send.",
+      data: mapped,
+    });
   } catch (error) {
     res.status(500).json({ status: false, message: "Internal server error: " + error });
   }
@@ -333,21 +337,13 @@ export const deleteEmployee = async (req, res) => {
     if (!emp) {
       return res.status(404).json({ status: false, message: "Employee not found" });
     }
-    // Send removal email before deleting
-    transporter.sendMail(
+    const emailResult = await sendEmail(
       getRemoveEmployeeMailOptions(
         emp.email,
         emp.name,
         emp.position,
         emp.department?.name || ''
-      ),
-      (err, info) => {
-        if (err) {
-          console.error("Error sending removal email:", err);
-        } else {
-          console.log("Removal email sent:", info.response);
-        }
-      }
+      )
     );
 
     await Employee.findByIdAndDelete(id);

@@ -142,7 +142,14 @@ const Employees = () => {
         joinDate: new Date().toISOString().split('T')[0]
       });
       setShowAddDialog(false);
-      toast.success('Employee added successfully!');
+      if (res.data?.emailSent) {
+        toast.success(res.data?.emailNotice || 'Employee added and welcome email queued.');
+      } else {
+        toast.warning(
+          res.data?.emailNotice ||
+            'Employee added, but the welcome email could not be sent.'
+        );
+      }
     } catch (err) {
       console.error(err);
       toast.error(err.response?.data?.message || 'Failed to add employee');

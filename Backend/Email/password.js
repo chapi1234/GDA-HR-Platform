@@ -1,39 +1,50 @@
+import {
+  buildEmailHtml,
+  detailPanel,
+  escapeHtml,
+  getPortalLoginUrl,
+  withEmailDefaults,
+} from "./emailTemplate.js";
+
 export default function getPasswordResetMailOptions(email, name, otp) {
-  return {
-    from: process.env.EMAIL,
+  const portalUrl = getPortalLoginUrl();
+
+  const contentHtml = `
+    <p>Hello <strong>${escapeHtml(name)}</strong>,</p>
+    <p>
+      We received a request to reset the password for your GammoDA HR System account.
+      Use the one-time password below on the sign-in page.
+    </p>
+    ${detailPanel("Password Reset Request", [
+      { label: "Account Email", value: escapeHtml(email) },
+      { label: "Request Type", value: "Password reset" },
+      { label: "OTP Validity", value: "10 minutes" },
+    ])}
+    <p style="text-align:center;"><strong>Your One-Time Password</strong></p>
+    <p style="text-align:center;"><span class="otp-box">${escapeHtml(otp)}</span></p>
+    <p><strong>How to reset your password</strong></p>
+    <ol class="steps">
+      <li>Open the sign-in page using the button below.</li>
+      <li>Click "Forgot password" and enter your email address.</li>
+      <li>Enter the OTP above when prompted, then set your new password.</li>
+    </ol>
+    <p style="text-align:center;">
+      <a class="button" href="${escapeHtml(portalUrl)}">Open Password Reset</a>
+    </p>
+    <div class="notice">
+      If you did not request a password reset, ignore this email and contact HR immediately.
+      Never share this OTP with anyone.
+    </div>
+  `;
+
+  return withEmailDefaults({
     to: email,
-    subject: "Gammoda HR-System Password Reset OTP",
-    html: `<!DOCTYPE html>
-            <html lang="en">
-            <head>
-            <meta charset="UTF-8">
-            <title>Password Change OTP</title>
-            <style>
-                body { font-family: Arial, sans-serif; background: #f6f8fa; margin: 0; padding: 0; }
-                .container { max-width: 500px; margin: 40px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 32px; }
-                .header { text-align: center; }
-                .title { font-size: 1.5rem; color: #d32f2f; margin: 16px 0 8px; }
-                .otp { font-size: 2rem; color: #1a237e; letter-spacing: 2px; background: #e3f2fd; padding: 12px 24px; border-radius: 6px; display: inline-block; margin: 16px 0; }
-                .content { color: #333; font-size: 1rem; margin-bottom: 24px; text-align: center; }
-                .footer { color: #888; font-size: 0.9rem; text-align: center; margin-top: 32px; }
-            </style>
-            </head>
-            <body>
-            <div class="container">
-                <div class="header">
-                <div class="title">Password Change OTP</div>
-                </div>
-                <div class="content">
-                <p>Hi <strong>${name}</strong>,</p>
-                <p>Your One-Time Password (OTP) for changing your password is:</p>
-                <div class="otp">${otp}</div>
-                <p>Please enter this code to proceed with changing your password. This OTP is valid for a limited time.</p>
-                </div>
-                <div class="footer">
-                &copy; 2025 GammoDA HR System. All rights reserved.
-                </div>
-            </div>
-        </body>
-    </html>`,
-  };
+    subject: "GammoDA HR System - Password Reset OTP",
+    html: buildEmailHtml({
+      title: "Password Reset OTP",
+      preheader: "Use this OTP to reset your GammoDA HR password.",
+      contentHtml,
+      accent: "#c62828",
+    }),
+  });
 }

@@ -1,5 +1,5 @@
-import transporter from "../Email/nodemailer.js";
 import getContactMailOptions from "../Email/contactUs.js";
+import { sendEmail } from "../Email/sendEmail.js";
 
 export const sendContact = async (req, res) => {
   try {
@@ -9,9 +9,16 @@ export const sendContact = async (req, res) => {
       return res.status(400).json({ success: false, message: "Email and message are required." });
     }
 
-    const mailOptions = getContactMailOptions({ name, email, subject, message });
+    const emailResult = await sendEmail(
+      getContactMailOptions({ name, email, subject, message })
+    );
 
-    await transporter.sendMail(mailOptions);
+    if (!emailResult.sent) {
+      return res.status(500).json({
+        success: false,
+        message: emailResult.error || "Failed to send message.",
+      });
+    }
 
     return res.status(200).json({ success: true, message: "Message sent successfully." });
   } catch (err) {
