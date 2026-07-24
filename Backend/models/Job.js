@@ -2,7 +2,11 @@ import mongoose, { mongo } from 'mongoose';
 
 const jobSchema = new mongoose.Schema({
   title: { type: String, required: true },
-  department: { type: mongoose.Schema.Types.ObjectId, ref: 'Department', required: true },
+  /** Preferred org placement (Sector / Sub-sector / Unit) */
+  sectorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Sector', default: null },
+  unitPath: { type: String, default: '' },
+  /** @deprecated legacy Department ref — kept for old job docs */
+  department: { type: mongoose.Schema.Types.ObjectId, ref: 'Department', required: false },
   description: String,
   requirements: [String],
   location: String,

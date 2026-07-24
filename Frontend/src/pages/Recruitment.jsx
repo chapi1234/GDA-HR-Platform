@@ -28,6 +28,8 @@ import {
   DialogTrigger,
 } from "../components/ui/dialog";
 import { Label } from "../components/ui/label";
+import { useClientPagination } from "../hooks/useClientPagination";
+import ListPagination from "../components/ListPagination";
 import { Textarea } from "../components/ui/textarea";
 import {
   Table,
@@ -84,7 +86,8 @@ const Recruitment = () => {
     width: "200px"
   }
 
-  const { isHR } = useAuth();
+  const { canRecruit } = useAuth();
+  const isHR = canRecruit;
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [showJobDialog, setShowJobDialog] = useState(false);
@@ -101,8 +104,8 @@ const Recruitment = () => {
   const API_URL = import.meta.env.VITE_API_URL;
   const API_BASE = API_URL;
 
-  // departments will be loaded from backend
-  const [departments, setDepartments] = useState([]);
+  // org units = sectors / sub-sectors / units (not legacy departments)
+  const [orgUnits, setOrgUnits] = useState([]);
   const jobTypes = ["Full-time", "Part-time", "Contract", "Internship"];
 
   // Load jobs from backend
@@ -120,9 +123,9 @@ const Recruitment = () => {
               if (typeof j.department === "object") {
                 deptName = j.department.name || j.department.label || "";
               } else if (typeof j.department === "string") {
-                // try to resolve from loaded departments (support id/_id/name)
-                const found = departments.find((d) => (d._id === j.department || d.id === j.department || d.name === j.department));
-                deptName = found ? found.name : j.department;
+                // try to resolve from loaded orgUnits (support id/_id/name)
+                const found = orgUnits.find((d) => (d._id === j.department || d.id === j.department || d.name === j.department || d.path === j.department));
+                deptName = found ? (found.path || found.name) : j.department;
               }
             }
 
@@ -156,7 +159,7 @@ const Recruitment = () => {
       }
     })();
     return () => { mounted = false; };
-  }, [API_BASE, departments]);
+  }, [API_BASE, orgUnits]);
 
   // applicants state will be loaded from backend
   const [allApplicants, setAllApplicants] = useState([]);
@@ -186,26 +189,32 @@ const Recruitment = () => {
   ];
   
 
-  // Load departments from backend public list
+  // Load sectors / units for job placement
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        const res = await axios.get(`${API_BASE}/api/departments/public-list`);
+        const res = await axios.get(`${API_BASE}/api/sectors/public-list`);
         if (!mounted) return;
-        if (res.data && res.data.data) {
-          // expect an array of objects; normalize to { id, name }
-          const normalized = res.data.data.map((d) => ({
-            _id: d._id || d.id || d._id?.toString?.() || d.name,
-            id: d.id || d._id || d.name,
-            name: d.name || d.label || d._id || d.id || String(d),
-          }));
-          setDepartments(normalized);
-        }
+        const list = Array.isArray(res.data?.data) ? res.data.data : [];
+        const normalized = list.map((s) => {
+          const id = s._id || s.id;
+          const path =
+            Array.isArray(s.pathNames) && s.pathNames.length
+              ? s.pathNames.join(' › ')
+              : s.name;
+          return {
+            _id: id,
+            id,
+            name: s.name,
+            path,
+            level: s.level,
+          };
+        });
+        setOrgUnits(normalized);
       } catch (err) {
-        console.error('Failed to load departments', err);
-        // fallback to an empty array
-        if (mounted) setDepartments([]);
+        console.error('Failed to load sectors', err);
+        if (mounted) setOrgUnits([]);
       }
     })();
     return () => { mounted = false; };
@@ -271,6 +280,19 @@ const Recruitment = () => {
     return matchesSearch && matchesStatus;
   });
 
+  const jobsPaging = useClientPagination(filteredJobs, 10, [
+    searchTerm,
+    filterStatus,
+    jobPostings.length,
+    activeTab,
+  ]);
+  const applicantsPaging = useClientPagination(filteredApplicants, 10, [
+    searchTerm,
+    filterStatus,
+    allApplicants.length,
+    activeTab,
+  ]);
+
   const handleAddJob = () => {
     if (!newJob.title || !newJob.department || !newJob.description) {
       toast.error("Please fill in all required fields");
@@ -282,6 +304,7 @@ const Recruitment = () => {
         const token = localStorage.getItem('authToken');
         const payload = {
           title: newJob.title,
+          sectorId: newJob.department,
           department: newJob.department,
           description: newJob.description,
           requirements:
@@ -300,9 +323,12 @@ const Recruitment = () => {
         });
         if (res.data && res.data.data) {
           const j = res.data.data;
-          // find department name from loaded departments if department is an id
+          // find department name from loaded orgUnits if department is an id
           const deptName =
-            departments.find((d) => (d._id === newJob.department || d.id === newJob.department || d.name === newJob.department))?.name ||
+            orgUnits.find((d) => (d._id === newJob.department || d.id === newJob.department || d.name === newJob.department))?.path ||
+            orgUnits.find((d) => (d._id === newJob.department || d.id === newJob.department || d.name === newJob.department))?.name ||
+            j.unitPath ||
+            j.department ||
             newJob.department;
           const uiJob = {
             id: j._id || j.id,
@@ -375,9 +401,9 @@ const Recruitment = () => {
 
   const handleViewJobDetails = (job) => {
     // when opening the details for edit, try to map department name -> id
-    const deptId = departments.find(
+    const deptId = orgUnits.find(
       (d) => d.name === job.department || d._id === job.department || d.id === job.department
-    )?._id || departments.find((d) => d.name === job.department)?.id || job.department;
+    )?._id || orgUnits.find((d) => d.name === job.department)?.id || job.department;
 
     // set basic selected job UI state immediately
     setSelectedJob(job);
@@ -462,11 +488,12 @@ const Recruitment = () => {
       const deptValue = editJobData.department;
       // If department is a name, try to find id
       const deptId =
-        departments.find((d) => d._id === deptValue || d.id === deptValue || d.name === deptValue)?._id ||
+        orgUnits.find((d) => d._id === deptValue || d.id === deptValue || d.name === deptValue)?._id ||
         deptValue;
 
       const payload = {
         title: editJobData.title,
+        sectorId: deptId,
         department: deptId,
         location: editJobData.location,
         jobType: editJobData.type,
@@ -489,7 +516,7 @@ const Recruitment = () => {
         const j = res.data.data;
         // resolve department name for UI
         const deptName =
-          departments.find((d) => d._id === (j.department || deptId) || d.id === (j.department || deptId) || d.name === (j.department || deptId))?.name ||
+          orgUnits.find((d) => d._id === (j.department || deptId) || d.id === (j.department || deptId) || d.name === (j.department || deptId))?.name ||
           (typeof j.department === "object" ? j.department.name : j.department) ||
           editJobData.department;
 
@@ -613,7 +640,7 @@ const Recruitment = () => {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="department">Department</Label>
+                    <Label htmlFor="department">Sector / Unit</Label>
                     <Select
                       value={newJob.department}
                       onValueChange={(value) =>
@@ -621,12 +648,12 @@ const Recruitment = () => {
                       }
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select department" />
+                        <SelectValue placeholder="Select sector / unit" />
                       </SelectTrigger>
                       <SelectContent>
-                        {departments.map((dept) => (
-                          <SelectItem key={dept._id || dept.id || dept.name} value={dept._id || dept.id || dept.name}>
-                            {dept.name}
+                        {orgUnits.map((unit) => (
+                          <SelectItem key={unit._id || unit.id || unit.path} value={unit._id || unit.id}>
+                            {unit.path || unit.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -826,8 +853,9 @@ const Recruitment = () => {
           </Card>
 
           {/* Job Listings */}
+          <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredJobs.map((job) => (
+            {jobsPaging.pagedItems.map((job) => (
               <Card
                 style={marginStyle}
                 key={job.id}
@@ -884,6 +912,20 @@ const Recruitment = () => {
               </Card>
             ))}
           </div>
+          {jobsPaging.showControls && (
+            <ListPagination
+              page={jobsPaging.page}
+              totalPages={jobsPaging.totalPages}
+              hasPrev={jobsPaging.hasPrev}
+              hasNext={jobsPaging.hasNext}
+              rangeLabel={jobsPaging.rangeLabel}
+              onPrev={() => jobsPaging.setPage((p) => Math.max(1, p - 1))}
+              onNext={() =>
+                jobsPaging.setPage((p) => Math.min(jobsPaging.totalPages, p + 1))
+              }
+            />
+          )}
+          </div>
 
         </TabsContent>
 
@@ -939,7 +981,7 @@ const Recruitment = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredApplicants.map((applicant) => (
+                {applicantsPaging.pagedItems.map((applicant) => (
                   <TableRow key={applicant.id}>
                     <TableCell>
                       <div className="flex items-center space-x-3">
@@ -1029,6 +1071,25 @@ const Recruitment = () => {
                 ))}
               </TableBody>
             </Table>
+            {applicantsPaging.showControls && (
+              <div className="p-4 pt-0">
+                <ListPagination
+                  page={applicantsPaging.page}
+                  totalPages={applicantsPaging.totalPages}
+                  hasPrev={applicantsPaging.hasPrev}
+                  hasNext={applicantsPaging.hasNext}
+                  rangeLabel={applicantsPaging.rangeLabel}
+                  onPrev={() =>
+                    applicantsPaging.setPage((p) => Math.max(1, p - 1))
+                  }
+                  onNext={() =>
+                    applicantsPaging.setPage((p) =>
+                      Math.min(applicantsPaging.totalPages, p + 1)
+                    )
+                  }
+                />
+              </div>
+            )}
           </Card>
         </TabsContent>
       </Tabs>
@@ -1098,7 +1159,7 @@ const Recruitment = () => {
                         />
                       </div>
                       <div>
-                        <Label>Department</Label>
+                        <Label>Sector / Unit</Label>
                         <Select
                           value={editJobData.department || ""}
                           onValueChange={(value) =>
@@ -1112,9 +1173,9 @@ const Recruitment = () => {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {departments.map((dept) => (
-                                <SelectItem key={dept._id || dept.id || dept.name} value={dept._id || dept.id || dept.name}>
-                                  {dept.name}
+                            {orgUnits.map((unit) => (
+                                <SelectItem key={unit._id || unit.id || unit.path} value={unit._id || unit.id}>
+                                  {unit.path || unit.name}
                                 </SelectItem>
                               ))}
                           </SelectContent>

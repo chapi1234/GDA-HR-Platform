@@ -117,7 +117,9 @@ export const getMe = async (req, res) => {
 // List candidates (HR/admin)
 export const listCandidates = async (req, res) => {
   try {
-    if (req.user?.role !== 'hr' && req.user?.role !== 'admin') return res.status(403).json({ status: false, message: 'Forbidden' });
+    if (!['hr', 'admin', 'superadmin'].includes(req.user?.role)) {
+      return res.status(403).json({ status: false, message: 'Forbidden' });
+    }
     const { search, status } = req.query;
     const q = {};
     if (search) q.name = { $regex: search, $options: 'i' };
