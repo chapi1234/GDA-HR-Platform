@@ -1,20 +1,30 @@
 import Device from "../models/Device.js";
 import Employee from "../models/Employee.js";
+import { HR_AND_ABOVE } from "../utils/roles.js";
+import { getScopedEmployeeIds } from "../utils/scope.js";
 
-// Get all devices
+// Get all devices (HR+ scoped)
 export const getDevices = async (req, res) => {
   try {
-    const devices = await Device.find().populate("assignedTo");
-    if (!devices || devices.length === 0) {
-      return res.status(404).json({
-        status: false,
-        message: "No devices found",
-      });
+    if (!HR_AND_ABOVE.includes(req.user?.role)) {
+      return res.status(403).json({ status: false, message: "Forbidden" });
     }
+    const ids = await getScopedEmployeeIds(req.user);
+    const filter =
+      ids === null
+        ? {}
+        : {
+            $or: [
+              { assignedTo: { $in: ids } },
+              { assignedTo: null },
+              { assignedTo: { $exists: false } },
+            ],
+          };
+    const devices = await Device.find(filter).populate("assignedTo");
     res.status(200).json({
       status: true,
       message: "Devices fetched successfully",
-      data: devices,
+      data: devices || [],
     });
   } catch (error) {
     res.status(500).json({
@@ -202,18 +212,33 @@ export const returnDevice = async (req, res) => {
   }
 };
 
-// Get devices for current user (employee) or all devices for HR/Admin
+// Get devices for current user; HR/Admin/Superadmin get scoped inventory
 export const getMyDevices = async (req, res) => {
   try {
     const userId = req.user?._id || req.user?.id;
     if (!userId) return res.status(401).json({ status: false, message: 'Unauthorized' });
-    if (req.user?.role === 'employee') {
-      const devices = await Device.find({ assignedTo: userId }).populate('assignedTo', 'name employeeId email');
-      return res.status(200).json({ status: true, message: 'My devices', data: devices });
+
+    if (HR_AND_ABOVE.includes(req.user?.role)) {
+      const ids = await getScopedEmployeeIds(req.user);
+      const filter =
+        ids === null
+          ? {}
+          : {
+              $or: [
+                { assignedTo: { $in: ids } },
+                { assignedTo: null },
+                { assignedTo: { $exists: false } },
+              ],
+            };
+      const devices = await Device.find(filter).populate('assignedTo', 'name employeeId email');
+      return res.status(200).json({ status: true, message: 'Devices fetched', data: devices });
     }
-    // HR/Admin: return all devices
-    const devices = await Device.find().populate('assignedTo', 'name employeeId email');
-    return res.status(200).json({ status: true, message: 'Devices fetched', data: devices });
+
+    const devices = await Device.find({ assignedTo: userId }).populate(
+      'assignedTo',
+      'name employeeId email'
+    );
+    return res.status(200).json({ status: true, message: 'My devices', data: devices });
   } catch (error) {
     return res.status(500).json({ status: false, message: 'Failed to fetch devices', error: String(error) });
   }

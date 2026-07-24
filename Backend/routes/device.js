@@ -11,34 +11,18 @@ import {
   getMyDevices,
 } from "../controllers/deviceController.js";
 import authorize from "../middlewares/authorize.js";
+import { ALL_STAFF_ROLES, HR_AND_ABOVE } from "../utils/roles.js";
 
-const router = express.Router(); 
+const router = express.Router();
 
-// Get devices for current user (employees) or all for HR/admin
-router.get("/me", authorize(["employee", "hr", "admin"]), getMyDevices);
-
-// Search devices (HR/admin)
-router.get("/search", authorize(["hr", "admin"]), searchDevices);
-
-// Get all devices (HR/admin)
-router.get("/", authorize(["hr", "admin"]), getDevices);
-
-// Get device by ID
-router.get("/:id", authorize(["hr", "admin"]), getDeviceById);
-
-// Create device
-router.post("/", authorize(["hr", "admin"]), createDevice);
-
-// Update device
-router.put("/:id", authorize(["hr", "admin"]), updateDevice);
-
-// Delete device
-router.delete("/:id", authorize(["hr", "admin"]), deleteDevice);
-
-// Assign device to employee
-router.post("/:id/assign", authorize(["hr", "admin"]), assignDevice);
-
-// Mark device as returned
-router.post("/:id/return", authorize(["hr", "admin"]), returnDevice);
+router.get("/me", authorize(ALL_STAFF_ROLES), getMyDevices);
+router.get("/search", authorize(HR_AND_ABOVE), searchDevices);
+router.get("/", authorize(HR_AND_ABOVE), getDevices);
+router.get("/:id", authorize(HR_AND_ABOVE), getDeviceById);
+router.post("/", authorize(HR_AND_ABOVE), createDevice);
+router.put("/:id", authorize(HR_AND_ABOVE), updateDevice);
+router.delete("/:id", authorize(HR_AND_ABOVE), deleteDevice);
+router.post("/:id/assign", authorize(HR_AND_ABOVE), assignDevice);
+router.post("/:id/return", authorize(HR_AND_ABOVE), returnDevice);
 
 export default router;

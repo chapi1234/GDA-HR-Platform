@@ -10,6 +10,8 @@ import {
   Laptop, Tablet, Smartphone, Monitor, Keyboard, Mouse,
   Calendar, MapPin, User, Clock
 } from 'lucide-react';
+import { useClientPagination } from '../hooks/useClientPagination';
+import ListPagination from '../components/ListPagination';
 
 const EmployeeDevices = () => {
 
@@ -117,6 +119,8 @@ const EmployeeDevices = () => {
       .finally(() => setLoading(false));
   }, []);
 
+  const devicesPaging = useClientPagination(myDevices, 10, [myDevices.length]);
+
   return (
     <div className="container mx-auto p-6 space-y-8">
       {/* Header */}
@@ -124,12 +128,12 @@ const EmployeeDevices = () => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold mb-2">My Company Devices</h1>
-            <p className="text-blue-100">Devices assigned to you by the company</p>
+            <p className="text-primary-foreground/90">Devices assigned to you by the company</p>
           </div>
           <div className="hidden md:block">
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
               <div className="text-2xl font-bold">{myDevices.length}</div>
-              <div className="text-sm text-blue-100">Total Devices</div>
+              <div className="text-sm text-primary-foreground/80">Total Devices</div>
             </div>
           </div>
         </div>
@@ -212,7 +216,7 @@ const EmployeeDevices = () => {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {myDevices.map((device) => {
+            {devicesPaging.pagedItems.map((device) => {
               const DeviceIcon = getDeviceIcon(device.type);
               return (
                 <div 
@@ -251,6 +255,21 @@ const EmployeeDevices = () => {
                 </div>
               );
             })}
+            {devicesPaging.showControls && (
+              <ListPagination
+                page={devicesPaging.page}
+                totalPages={devicesPaging.totalPages}
+                hasPrev={devicesPaging.hasPrev}
+                hasNext={devicesPaging.hasNext}
+                rangeLabel={devicesPaging.rangeLabel}
+                onPrev={() => devicesPaging.setPage((p) => Math.max(1, p - 1))}
+                onNext={() =>
+                  devicesPaging.setPage((p) =>
+                    Math.min(devicesPaging.totalPages, p + 1)
+                  )
+                }
+              />
+            )}
           </div>
         </CardContent>
       </Card>

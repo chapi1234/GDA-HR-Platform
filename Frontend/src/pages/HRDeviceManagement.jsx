@@ -28,6 +28,8 @@ import {
   Edit, Trash2, UserPlus, Calendar, MapPin, AlertCircle, RotateCw
 } from 'lucide-react';
 import axios from 'axios';
+import { useClientPagination } from '../hooks/useClientPagination';
+import ListPagination from '../components/ListPagination';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -79,6 +81,17 @@ const HRDeviceManagement = () => {
     String(device.employeeName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     String(device.serialNumber || '').toLowerCase().includes(searchTerm.toLowerCase()))
   );
+
+  const assignmentsPaging = useClientPagination(filteredAssignments, 10, [
+    searchTerm,
+    devices.length,
+  ]);
+  const availablePaging = useClientPagination(availableFromState, 10, [
+    devices.length,
+  ]);
+  const employeesPaging = useClientPagination(employeesList, 10, [
+    employeesList.length,
+  ]);
 
   const getEmployeeDevices = (employeeId) => {
     return normalizedDevices.filter(device => String(device.employeeId || '') === String(employeeId));
@@ -252,16 +265,16 @@ const HRDeviceManagement = () => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold mb-2">Device Management</h1>
-            <p className="text-blue-100">Manage and track company device assignments</p>
+            <p className="text-primary-foreground/90">Manage and track company device assignments</p>
           </div>
           <div className="hidden md:flex items-center space-x-4">
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 text-center">
               <div className="text-2xl font-bold">{normalizedDevices.filter(d => d.status !== 'available').length}</div>
-              <div className="text-sm text-blue-100">Assigned</div>
+              <div className="text-sm text-primary-foreground/80">Assigned</div>
             </div>
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 text-center">
               <div className="text-2xl font-bold">{availableFromState.length}</div>
-              <div className="text-sm text-blue-100">Available</div>
+              <div className="text-sm text-primary-foreground/80">Available</div>
             </div>
           </div>
         </div>
@@ -543,7 +556,7 @@ const HRDeviceManagement = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {filteredAssignments.map((device) => {
+                {assignmentsPaging.pagedItems.map((device) => {
                   const DeviceIcon = getDeviceIcon(device.deviceType);
                   return (
                     <div 
@@ -613,6 +626,23 @@ const HRDeviceManagement = () => {
                     </div>
                   );
                 })}
+                {assignmentsPaging.showControls && (
+                  <ListPagination
+                    page={assignmentsPaging.page}
+                    totalPages={assignmentsPaging.totalPages}
+                    hasPrev={assignmentsPaging.hasPrev}
+                    hasNext={assignmentsPaging.hasNext}
+                    rangeLabel={assignmentsPaging.rangeLabel}
+                    onPrev={() =>
+                      assignmentsPaging.setPage((p) => Math.max(1, p - 1))
+                    }
+                    onNext={() =>
+                      assignmentsPaging.setPage((p) =>
+                        Math.min(assignmentsPaging.totalPages, p + 1)
+                      )
+                    }
+                  />
+                )}
               </div>
             </CardContent>
           </Card>
@@ -621,7 +651,7 @@ const HRDeviceManagement = () => {
         {/* By Employee Tab */}
         <TabsContent value="by-employee" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {employeesList.map((employee) => {
+            {employeesPaging.pagedItems.map((employee) => {
               const empId = employee._id || employee.id;
               const employeeDevices = getEmployeeDevices(empId);
               return (
@@ -689,6 +719,21 @@ const HRDeviceManagement = () => {
               );
             })}
           </div>
+          {employeesPaging.showControls && (
+            <ListPagination
+              page={employeesPaging.page}
+              totalPages={employeesPaging.totalPages}
+              hasPrev={employeesPaging.hasPrev}
+              hasNext={employeesPaging.hasNext}
+              rangeLabel={employeesPaging.rangeLabel}
+              onPrev={() => employeesPaging.setPage((p) => Math.max(1, p - 1))}
+              onNext={() =>
+                employeesPaging.setPage((p) =>
+                  Math.min(employeesPaging.totalPages, p + 1)
+                )
+              }
+            />
+          )}
         </TabsContent>
 
         {/* Available Devices Tab */}
@@ -705,7 +750,7 @@ const HRDeviceManagement = () => {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {availableFromState.map((device) => {
+                {availablePaging.pagedItems.map((device) => {
                   const DeviceIcon = getDeviceIcon(device.deviceType);
                   return (
                     <div 
@@ -754,6 +799,25 @@ const HRDeviceManagement = () => {
                   );
                 })}
               </div>
+              {availablePaging.showControls && (
+                <div className="pt-4">
+                  <ListPagination
+                    page={availablePaging.page}
+                    totalPages={availablePaging.totalPages}
+                    hasPrev={availablePaging.hasPrev}
+                    hasNext={availablePaging.hasNext}
+                    rangeLabel={availablePaging.rangeLabel}
+                    onPrev={() =>
+                      availablePaging.setPage((p) => Math.max(1, p - 1))
+                    }
+                    onNext={() =>
+                      availablePaging.setPage((p) =>
+                        Math.min(availablePaging.totalPages, p + 1)
+                      )
+                    }
+                  />
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
