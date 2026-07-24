@@ -19,22 +19,18 @@ import {
   Settings,
   User,
   LogOut,
-  Users,
-  Calendar,
-  Building2,
-  DollarSign,
-  UserCheck,
-  Briefcase,
   Sun,
   Moon,
   Monitor,
-  Laptop,
   ChevronDown,
 } from "lucide-react"
 import logo  from '../../assets/download.jpg';
+import { getNavigationItems } from "./navItems"
+import NotificationBell from "./NotificationBell"
 
 export const Sidebar = () => {
-  const { user, logout, isHR } = useAuth()
+  const auth = useAuth()
+  const { user, logout, roleLabel, canManage } = auth
   const { theme, setTheme } = useTheme()
   const location = useLocation()
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -107,31 +103,7 @@ export const Sidebar = () => {
     logout()
   }
 
-  const navigationItems = isHR
-    ? [
-        { label: "Dashboard", href: "/dashboard", icon: Building2 },
-        { label: "Employees", href: "/employees", icon: Users },
-        { label: "Departments", href: "/departments", icon: Building2 },
-        { label: "Attendance", href: "/attendance", icon: UserCheck },
-        { label: "Salary", href: "/salary", icon: DollarSign },
-        { label: "Leave Requests", href: "/leave-requests", icon: Calendar },
-        { label: "Recruitment", href: "/recruitment", icon: Briefcase },
-        { label: "Device Management", href: "/device-management", icon: Laptop },
-        { label: 'Calendar', href: '/calendar', icon: Calendar },
-        { label: "Goals", href: "/goals", icon: Briefcase },
-        { label: "Settings ", href: "/settings", icon: Settings },
-      ]
-    : [
-        { label: "Dashboard", href: "/dashboard", icon: Building2 },
-        { label: "My Profile", href: "/profile", icon: User },
-        { label: "Attendance", href: "/attendance", icon: UserCheck },
-        { label: "My Salary", href: "/salary", icon: DollarSign },
-        { label: "Leave Requests", href: "/leave-requests", icon: Calendar },
-        { label: "Calendar", href: "/calendar", icon: Calendar },
-        { label: "My Devices", href: "/my-devices", icon: Laptop },
-        { label: "Goals", href: "/goals", icon: Briefcase },
-        { label: "Settings ", href: "/settings", icon: Settings },
-      ]
+  const navigationItems = getNavigationItems(auth)
 
   const isActiveLink = (href) => location.pathname === href
 
@@ -169,14 +141,18 @@ export const Sidebar = () => {
               <li key={item.href}>
                 <Link
                   to={item.href}
-                  className={`flex items-center space-x-3 px-3 py-2 rounded-md transition-all duration-200 ${
+                  className={`flex items-center rounded-md transition-all duration-200 ${
+                    isCollapsed
+                      ? "justify-center px-0 py-2.5"
+                      : "space-x-3 px-3 py-2"
+                  } ${
                     active
                       ? "bg-sidebar-primary text-sidebar-primary-foreground"
                       : "text-sidebar-foreground hover:bg-sidebar-accent"
                   }`}
                   title={isCollapsed ? item.label : undefined}
                 >
-                  <Icon className="w-5 h-5 flex-shrink-0" />
+                  <Icon className="w-5 h-5 flex-shrink-0 block" />
                   {!isCollapsed && <span className="text-sm font-medium">{item.label}</span>}
                 </Link>
               </li>
@@ -187,14 +163,23 @@ export const Sidebar = () => {
 
       {/* Bottom Controls */}
       <div className="border-t border-sidebar-border p-4 space-y-3">
+        <div className={`flex items-center ${isCollapsed ? "justify-center" : "justify-between"} gap-2`}>
+          {!isCollapsed && (
+            <span className="text-sm text-sidebar-foreground px-1">Notifications</span>
+          )}
+          <NotificationBell align="end" side="top" />
+        </div>
+
         <Button
           variant="ghost"
           size="sm"
           onClick={toggleTheme}
-          className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent"
+          className={`w-full text-sidebar-foreground hover:bg-sidebar-accent ${
+            isCollapsed ? "justify-center px-0" : "justify-start"
+          }`}
           title={`Current theme: ${theme}`}
         >
-          <ThemeIcon className="w-5 h-5 flex-shrink-0" />
+          <ThemeIcon className="w-5 h-5 flex-shrink-0 block" />
           {!isCollapsed && <span className="text-sm ml-2">Theme</span>}
         </Button>
 
@@ -202,8 +187,8 @@ export const Sidebar = () => {
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
-              className={`w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent ${
-                isCollapsed ? "p-0" : ""
+              className={`w-full text-sidebar-foreground hover:bg-sidebar-accent ${
+                isCollapsed ? "justify-center px-0 py-2" : "justify-start"
               }`}
             >
               <Avatar className="w-8 h-8 flex-shrink-0">
@@ -215,8 +200,8 @@ export const Sidebar = () => {
               {!isCollapsed && (
                 <div className="flex-1 text-left ml-2 min-w-0">
                   <p className="text-sm font-medium truncate">{user?.name}</p>
-                  <Badge variant="secondary" className="text-xs mt-1">
-                    {isHR ? "HR" : "Employee"}
+                  <Badge variant={canManage ? "default" : "secondary"} className="text-xs mt-1">
+                    {roleLabel}
                   </Badge>
                 </div>
               )}
@@ -226,8 +211,8 @@ export const Sidebar = () => {
             <div className="px-2 py-1.5">
               <p className="text-sm font-medium">{user?.name}</p>
               <p className="text-xs text-muted-foreground">{user?.email}</p>
-              <Badge variant={isHR ? "default" : "secondary"} className="text-xs mt-1">
-                {deptName || getDepartmentName(user?.department)}
+              <Badge variant="secondary" className="text-xs mt-1">
+                {user?.unitPath || deptName || getDepartmentName(user?.department) || roleLabel}
               </Badge>
             </div>
             <DropdownMenuSeparator />
@@ -255,7 +240,9 @@ export const Sidebar = () => {
           variant="ghost"
           size="sm"
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent"
+          className={`w-full text-sidebar-foreground hover:bg-sidebar-accent ${
+            isCollapsed ? "justify-center px-0" : "justify-start"
+          }`}
         >
           <ChevronDown
             className={`w-5 h-5 flex-shrink-0 transition-transform ${

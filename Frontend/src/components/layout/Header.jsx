@@ -20,21 +20,17 @@ import {
   LogOut,
   Menu,
   X,
-  Users,
-  Calendar,
-  Building2,
-  DollarSign,
-  UserCheck,
-  Briefcase,
-  Laptop,
   Sun,
   Moon,
   Monitor,
 } from 'lucide-react';
 import logo from '../../assets/download.jpg';
+import { getNavigationItems } from './navItems';
+import NotificationBell from './NotificationBell';
 
 export const Header = () => {
-  const { user, logout, isHR } = useAuth();
+  const auth = useAuth();
+  const { user, logout, roleLabel, canManage } = auth;
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -103,31 +99,7 @@ export const Header = () => {
     navigate('/auth');
   };
 
-  const navigationItems = isHR
-    ? [
-        { label: 'Dashboard', href: '/dashboard', icon: Building2 },
-        { label: 'Employees', href: '/employees', icon: Users },
-        { label: 'Departments', href: '/departments', icon: Building2 },
-        { label: 'Attendance', href: '/attendance', icon: UserCheck },
-        { label: 'Salary', href: '/salary', icon: DollarSign },
-        { label: 'Leave Requests', href: '/leave-requests', icon: Calendar },
-        { label: 'Recruitment', href: '/recruitment', icon: Briefcase },
-        { label: 'Device Management', href: '/device-management', icon: Laptop },
-        { label: 'Calendar', href: '/calendar', icon: Calendar },
-        { label: "Goals", href: "/goals", icon: Briefcase },
-        { label: "Settings ", href: "/settings", icon: Settings },
-      ]
-    : [
-        { label: 'Dashboard', href: '/dashboard', icon: Building2 },
-        { label: 'My Profile', href: '/profile', icon: User },
-        { label: 'Attendance', href: '/attendance', icon: UserCheck },
-        { label: 'My Salary', href: '/salary', icon: DollarSign },
-        { label: 'Leave Requests', href: '/leave-requests', icon: Calendar },
-        { label: 'Calendar', href: '/calendar', icon: Calendar },
-        { label: 'My Devices', href: '/my-devices', icon: Laptop },
-        { label: "Goals", href: "/goals", icon: Briefcase },
-        { label: "Settings ", href: "/settings", icon: Settings },
-      ];
+  const navigationItems = getNavigationItems(auth);
 
   return (
     <header className="sticky top-0 z-50 lg:hidden bg-background border-b border-border">
@@ -158,6 +130,8 @@ export const Header = () => {
               <ThemeIcon className="w-5 h-5" />
             </Button>
 
+            <NotificationBell align="end" side="bottom" />
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="flex items-center space-x-2 hover:bg-accent">
@@ -169,8 +143,8 @@ export const Header = () => {
                   </Avatar>
                   <div className="hidden md:block text-left">
                     <p className="text-sm font-medium">{user?.name}</p>
-                    <Badge variant={isHR ? 'default' : 'secondary'} className="text-xs">
-                      {isHR ? 'HR Manager' : 'Employee'}
+                    <Badge variant={canManage ? 'default' : 'secondary'} className="text-xs">
+                      {roleLabel}
                     </Badge>
                   </div>
                 </Button>
@@ -179,8 +153,8 @@ export const Header = () => {
                 <div className="px-2 py-1.5">
                   <p className="text-sm font-medium">{user?.name}</p>
                   <p className="text-xs text-muted-foreground">{user?.email}</p>
-                  <Badge variant={isHR ? 'default' : 'secondary'} className="text-xs mt-1">
-                    {deptName || getDepartmentName(user?.department)}
+                  <Badge variant="secondary" className="text-xs mt-1">
+                    {user?.unitPath || deptName || getDepartmentName(user?.department) || roleLabel}
                   </Badge>
                 </div>
                 <DropdownMenuSeparator />
