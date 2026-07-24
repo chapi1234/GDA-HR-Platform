@@ -1,7 +1,13 @@
 import Event from "../models/Event.js";
 import Joi from "joi";
+import {
+  buildEventVisibilityFilter,
+  resolveEventAudience,
+  extraEmitRooms,
+} from "../utils/eventScope.js";
+import { emitAnnouncement } from "../socket.js";
+import { MANAGER_AND_ABOVE, ROLES } from "../utils/roles.js";
 
-// Validation schema
 const eventSchema = Joi.object({
   title: Joi.string().trim().min(1).max(200).required(),
   description: Joi.string().allow("").max(2000),
@@ -9,11 +15,11 @@ const eventSchema = Joi.object({
   time: Joi.string().trim().default("09:00"),
   duration: Joi.number().integer().min(1).max(24 * 60).default(60),
   type: Joi.string()
-    .valid("meeting", "holiday", "training", "personal", "other")
+    .valid("meeting", "holiday", "training", "personal", "announcement", "other")
     .default("meeting"),
   location: Joi.string().allow(""),
   attendees: Joi.array().items(Joi.string().trim()).default([]),
-  color: Joi.string().allow("")
+  color: Joi.string().allow(""),
 });
 
 const typeToColor = {
@@ -21,29 +27,23 @@ const typeToColor = {
   holiday: "bg-red-500",
   training: "bg-purple-500",
   personal: "bg-green-500",
-  other: "bg-gray-500"
+  announcement: "bg-amber-500",
+  other: "bg-gray-500",
 };
 
 function parseDateOnly(value) {
   if (!value) return null;
-  // Accept Date as-is
   if (value instanceof Date) return value;
-  // If string like YYYY-MM-DD, create LOCAL date to avoid UTC offset issues
-  if (typeof value === 'string') {
+  if (typeof value === "string") {
     const m = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (m) {
-      const year = Number(m[1]);
-      const monthIndex = Number(m[2]) - 1; // 0-based
-      const day = Number(m[3]);
-      const local = new Date(year, monthIndex, day); // local midnight
+      const local = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
       if (!Number.isNaN(local.getTime())) return local;
     }
-    // fallback for other string formats
     const d = new Date(value);
     if (!Number.isNaN(d.getTime())) return d;
     return null;
   }
-  // Fallback
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return null;
   return d;
@@ -61,12 +61,67 @@ function endOfDay(date) {
   return d;
 }
 
-// Create
+function serializeEvent(doc) {
+  if (!doc) return doc;
+  const obj = typeof doc.toObject === "function" ? doc.toObject() : { ...doc };
+  obj.id = obj._id;
+  if (obj.createdBy != null) {
+    obj.createdBy =
+      typeof obj.createdBy === "object" && obj.createdBy._id
+        ? String(obj.createdBy._id)
+        : String(obj.createdBy);
+  }
+  return obj;
+}
+
+/** Creator, Org Admin, or Super Admin may update/delete an event. */
+function canMutateEvent(user, event) {
+  if (!user || !event) return false;
+  if (user.role === ROLES.SUPERADMIN || user.role === ROLES.ADMIN) return true;
+  const uid = user._id || user.id;
+  if (!uid || !event.createdBy) return false;
+  const createdBy =
+    typeof event.createdBy === "object" && event.createdBy._id
+      ? event.createdBy._id
+      : event.createdBy;
+  return String(createdBy) === String(uid);
+}
+
 export const createEvent = async (req, res) => {
   try {
-    const { error, value } = eventSchema.validate(req.body, { abortEarly: false });
+    if (!MANAGER_AND_ABOVE.includes(req.user?.role)) {
+      return res.status(403).json({
+        status: false,
+        message: "Only managers and above can post events",
+      });
+    }
+
+    const { error, value } = eventSchema.validate(req.body, {
+      abortEarly: false,
+    });
     if (error) {
-      return res.status(400).json({ status: false, message: "Validation failed", details: error.details });
+      return res.status(400).json({
+        status: false,
+        message: "Validation failed",
+        details: error.details,
+      });
+    }
+
+    // Unit leads may only post announcements (unit notices)
+    if (
+      (req.user.role === ROLES.MANAGER ||
+        req.user.role === ROLES.UNIT_MANAGER) &&
+      value.type !== "announcement"
+    ) {
+      return res.status(403).json({
+        status: false,
+        message: "Managers can only post announcements for their unit",
+      });
+    }
+
+    const audience = resolveEventAudience(req.user);
+    if (audience.error) {
+      return res.status(403).json({ status: false, message: audience.error });
     }
 
     const dateParsed = parseDateOnly(value.date);
@@ -74,7 +129,10 @@ export const createEvent = async (req, res) => {
       return res.status(400).json({ status: false, message: "Invalid date format" });
     }
 
-    const color = value.color && value.color.trim().length > 0 ? value.color : (typeToColor[value.type] || "bg-gray-500");
+    const color =
+      value.color && value.color.trim().length > 0
+        ? value.color
+        : typeToColor[value.type] || "bg-gray-500";
 
     const created = await Event.create({
       title: value.title,
@@ -85,50 +143,92 @@ export const createEvent = async (req, res) => {
       type: value.type,
       location: value.location,
       attendees: value.attendees || [],
-      color
+      color,
+      visibilityScope: audience.visibilityScope,
+      sectorId: audience.sectorId,
+      subSectorId: audience.subSectorId,
+      subSubSectorId: audience.subSubSectorId,
+      createdBy: req.user._id || req.user.id,
     });
 
-    return res.status(201).json({ status: true, message: "Event created", data: created });
+    if (value.type === "announcement") {
+      const payload = {
+        id: String(created._id),
+        title: created.title,
+        description: created.description || "",
+        type: created.type,
+        date: created.date,
+        time: created.time,
+        visibilityScope: created.visibilityScope,
+        audienceLabel: audience.audienceLabel,
+        createdAt: created.createdAt,
+      };
+      emitAnnouncement(audience.room, payload);
+      for (const room of extraEmitRooms(audience)) {
+        emitAnnouncement(room, payload);
+      }
+    }
+
+    return res.status(201).json({
+      status: true,
+      message: "Event created",
+      data: {
+        ...serializeEvent(created),
+        audienceLabel: audience.audienceLabel,
+        createdByName: req.user.name || null,
+      },
+    });
   } catch (err) {
     console.error("createEvent error:", err);
     return res.status(500).json({ status: false, message: "Internal server error" });
   }
 };
 
-// List with filters: from, to, type, q
 export const getEvents = async (req, res) => {
   try {
     const { from, to, type, q } = req.query;
+    const scopeFilter = buildEventVisibilityFilter(req.user);
+    const filter = { ...scopeFilter };
 
-    const filter = {};
     if (from || to) {
       filter.date = {};
       if (from) filter.date.$gte = startOfDay(parseDateOnly(from));
       if (to) filter.date.$lte = endOfDay(parseDateOnly(to));
     }
-    if (type) {
-      filter.type = type;
-    }
+    if (type) filter.type = type;
     if (q && String(q).trim().length > 0) {
       const regex = new RegExp(String(q).trim(), "i");
-      filter.$or = [{ title: regex }, { description: regex }, { location: regex }];
+      const textOr = [
+        { title: regex },
+        { description: regex },
+        { location: regex },
+      ];
+      // Combine scope $or with text search carefully
+      if (filter.$or) {
+        filter.$and = [{ $or: filter.$or }, { $or: textOr }];
+        delete filter.$or;
+      } else {
+        filter.$or = textOr;
+      }
     }
 
-    const events = await Event.find(filter).sort({ date: 1, time: 1, createdAt: -1 });
-    return res.status(200).json({ status: true, data: events });
+    const events = await Event.find(filter).sort({
+      date: 1,
+      time: 1,
+      createdAt: -1,
+    });
+    return res.status(200).json({ status: true, data: events.map(serializeEvent) });
   } catch (err) {
     console.error("getEvents error:", err);
     return res.status(500).json({ status: false, message: "Internal server error" });
   }
 };
 
-// Search alias endpoint
 export const searchEvents = async (req, res) => {
   req.query.q = req.query.q || "";
   return getEvents(req, res);
 };
 
-// Get by a specific date (YYYY-MM-DD)
 export const getEventsByDate = async (req, res) => {
   try {
     const { date } = req.params;
@@ -136,77 +236,165 @@ export const getEventsByDate = async (req, res) => {
     if (!d) {
       return res.status(400).json({ status: false, message: "Invalid date" });
     }
-    const events = await Event.find({ date: { $gte: startOfDay(d), $lte: endOfDay(d) } }).sort({ time: 1 });
-    return res.status(200).json({ status: true, data: events });
+    const scopeFilter = buildEventVisibilityFilter(req.user);
+    const events = await Event.find({
+      ...scopeFilter,
+      date: { $gte: startOfDay(d), $lte: endOfDay(d) },
+    }).sort({ time: 1 });
+    return res.status(200).json({ status: true, data: events.map(serializeEvent) });
   } catch (err) {
     console.error("getEventsByDate error:", err);
     return res.status(500).json({ status: false, message: "Internal server error" });
   }
 };
 
-// Upcoming
 export const getUpcomingEvents = async (req, res) => {
   try {
     const limit = Math.max(1, Math.min(Number(req.query.limit) || 5, 50));
-    const now = startOfDay(new Date());
-    const events = await Event.find({ date: { $gte: now } })
+    // Upcoming = starting tomorrow (not today)
+    const tomorrow = startOfDay(new Date());
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const scopeFilter = buildEventVisibilityFilter(req.user);
+    const events = await Event.find({
+      ...scopeFilter,
+      date: { $gte: tomorrow },
+    })
       .sort({ date: 1, time: 1 })
       .limit(limit);
-    return res.status(200).json({ status: true, data: events });
+    return res.status(200).json({ status: true, data: events.map(serializeEvent) });
   } catch (err) {
     console.error("getUpcomingEvents error:", err);
     return res.status(500).json({ status: false, message: "Internal server error" });
   }
 };
 
-// Get by id
+/** Recent announcements for the notification bell (scoped) */
+export const getRecentAnnouncements = async (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(Number(req.query.limit) || 20, 50));
+    const scopeFilter = buildEventVisibilityFilter(req.user);
+    const events = await Event.find({
+      ...scopeFilter,
+      type: "announcement",
+    })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .populate({ path: "createdBy", select: "name role" });
+
+    return res.status(200).json({
+      status: true,
+      data: events.map((e) => {
+        const obj = serializeEvent(e);
+        obj.createdByName = e.createdBy?.name || null;
+        return obj;
+      }),
+    });
+  } catch (err) {
+    console.error("getRecentAnnouncements error:", err);
+    return res.status(500).json({ status: false, message: "Internal server error" });
+  }
+};
+
 export const getEventById = async (req, res) => {
   try {
     const { id } = req.params;
     const event = await Event.findById(id);
-    if (!event) return res.status(404).json({ status: false, message: "Event not found" });
-    return res.status(200).json({ status: true, data: event });
+    if (!event) {
+      return res.status(404).json({ status: false, message: "Event not found" });
+    }
+    // Soft visibility check
+    const visible = await Event.findOne({
+      _id: id,
+      ...buildEventVisibilityFilter(req.user),
+    });
+    if (!visible && req.user?.role !== ROLES.SUPERADMIN) {
+      return res.status(403).json({ status: false, message: "Access denied" });
+    }
+    return res.status(200).json({ status: true, data: serializeEvent(event) });
   } catch (err) {
     console.error("getEventById error:", err);
     return res.status(500).json({ status: false, message: "Internal server error" });
   }
 };
 
-// Update
 export const updateEvent = async (req, res) => {
   try {
     const { id } = req.params;
-    const { error, value } = eventSchema.fork(["title", "date"], (s) => s.optional()).validate(req.body, { abortEarly: false });
+    const { error, value } = eventSchema
+      .fork(["title", "date"], (s) => s.optional())
+      .validate(req.body, { abortEarly: false });
     if (error) {
-      return res.status(400).json({ status: false, message: "Validation failed", details: error.details });
+      return res.status(400).json({
+        status: false,
+        message: "Validation failed",
+        details: error.details,
+      });
+    }
+
+    const existing = await Event.findById(id);
+    if (!existing) {
+      return res.status(404).json({ status: false, message: "Event not found" });
+    }
+
+    if (!canMutateEvent(req.user, existing)) {
+      return res.status(403).json({
+        status: false,
+        message: "Only the creator, Org Admin, or Super Admin can update this event",
+      });
+    }
+
+    // Managers / unit managers may only keep announcements when editing
+    if (
+      (req.user.role === ROLES.MANAGER ||
+        req.user.role === ROLES.UNIT_MANAGER) &&
+      (value.type || existing.type) !== "announcement"
+    ) {
+      return res.status(403).json({
+        status: false,
+        message: "Managers can only manage announcements for their unit",
+      });
     }
 
     const update = { ...value };
     if (update.date) {
       const d = parseDateOnly(update.date);
-      if (!d) return res.status(400).json({ status: false, message: "Invalid date format" });
+      if (!d) {
+        return res.status(400).json({ status: false, message: "Invalid date format" });
+      }
       update.date = d;
     }
-
     if (!update.color && update.type) {
       update.color = typeToColor[update.type] || "bg-gray-500";
     }
 
     const updated = await Event.findByIdAndUpdate(id, update, { new: true });
-    if (!updated) return res.status(404).json({ status: false, message: "Event not found" });
-    return res.status(200).json({ status: true, message: "Event updated", data: updated });
+    return res.status(200).json({
+      status: true,
+      message: "Event updated",
+      data: serializeEvent(updated),
+    });
   } catch (err) {
     console.error("updateEvent error:", err);
     return res.status(500).json({ status: false, message: "Internal server error" });
   }
 };
 
-// Delete
 export const deleteEvent = async (req, res) => {
   try {
     const { id } = req.params;
-    const deleted = await Event.findByIdAndDelete(id);
-    if (!deleted) return res.status(404).json({ status: false, message: "Event not found" });
+    const existing = await Event.findById(id);
+    if (!existing) {
+      return res.status(404).json({ status: false, message: "Event not found" });
+    }
+
+    if (!canMutateEvent(req.user, existing)) {
+      return res.status(403).json({
+        status: false,
+        message: "Only the creator, Org Admin, or Super Admin can delete this event",
+      });
+    }
+
+    await Event.findByIdAndDelete(id);
     return res.status(200).json({ status: true, message: "Event deleted" });
   } catch (err) {
     console.error("deleteEvent error:", err);

@@ -6,23 +6,31 @@ import {
   searchEvents,
   getEventsByDate,
   getUpcomingEvents,
+  getRecentAnnouncements,
   getEventById,
   updateEvent,
   deleteEvent,
 } from "../controllers/eventController.js";
+import {
+  ALL_STAFF_ROLES,
+  MANAGER_AND_ABOVE,
+} from "../utils/roles.js";
 
 const router = express.Router();
 
-// Read endpoints (employees can view)
-router.get("/", authorize(["employee", "hr", "admin"]), getEvents);
-router.get("/search", authorize(["employee", "hr", "admin"]), searchEvents);
-router.get("/date/:date", authorize(["employee", "hr", "admin"]), getEventsByDate);
-router.get("/upcoming", authorize(["employee", "hr", "admin"]), getUpcomingEvents);
-router.get("/:id", authorize(["employee", "hr", "admin"]), getEventById);
+router.get("/", authorize(ALL_STAFF_ROLES), getEvents);
+router.get("/search", authorize(ALL_STAFF_ROLES), searchEvents);
+router.get("/date/:date", authorize(ALL_STAFF_ROLES), getEventsByDate);
+router.get("/upcoming", authorize(ALL_STAFF_ROLES), getUpcomingEvents);
+router.get(
+  "/announcements/recent",
+  authorize(ALL_STAFF_ROLES),
+  getRecentAnnouncements
+);
+router.get("/:id", authorize(ALL_STAFF_ROLES), getEventById);
 
-// Mutating endpoints (restricted to HR/Admin)
-router.post("/", authorize(["hr", "admin"]), createEvent);
-router.put("/:id", authorize(["hr", "admin"]), updateEvent);
-router.delete("/:id", authorize(["hr", "admin"]), deleteEvent);
+router.post("/", authorize(MANAGER_AND_ABOVE), createEvent);
+router.put("/:id", authorize(MANAGER_AND_ABOVE), updateEvent);
+router.delete("/:id", authorize(MANAGER_AND_ABOVE), deleteEvent);
 
 export default router;
