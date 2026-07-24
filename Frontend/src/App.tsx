@@ -2,20 +2,27 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ToastContainer } from 'react-toastify';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { NotificationProvider } from './contexts/NotificationContext';
 import { Header } from './components/layout/Header';
 import { AuthForm } from './components/auth/AuthForm';
+import RoleRoute from './components/auth/RoleRoute';
 import Dashboard from './pages/Dashboard';
 import Employees from './pages/Employees';
+import EmployeeDetail from './pages/EmployeeDetail';
 import Departments from './pages/Departments';
+import Sectors from './pages/Sectors';
+import AdminConsole from './pages/AdminConsole';
 import Attendance from './pages/Attendance';
 import Salary from './pages/Salary';
+import SalaryAdvances from './pages/SalaryAdvances';
 import LeaveRequests from './pages/LeaveRequests';
 import Recruitment from './pages/Recruitment';
 import Profile from './pages/Profile';
+import Chat from './pages/Chat';
 import Settings from './pages/Settings';
 import Calendar from './pages/Calendar';
 import Goals from './pages/Goals';
@@ -93,17 +100,49 @@ const AppRoutes = () => {
         path="/employees" 
         element={
           <ProtectedRoute>
-            <Employees />
+            <RoleRoute capability="canManage">
+              <Employees />
+            </RoleRoute>
           </ProtectedRoute>
         } 
+      />
+      <Route
+        path="/employees/:id"
+        element={
+          <ProtectedRoute>
+            <RoleRoute capability="canManage">
+              <EmployeeDetail />
+            </RoleRoute>
+          </ProtectedRoute>
+        }
       />
       <Route 
         path="/departments" 
         element={
           <ProtectedRoute>
-            <Departments />
+            <Navigate to="/sectors" replace />
           </ProtectedRoute>
         } 
+      />
+      <Route
+        path="/sectors"
+        element={
+          <ProtectedRoute>
+            <RoleRoute capability="canManage">
+              <Sectors />
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin-console"
+        element={
+          <ProtectedRoute>
+            <RoleRoute capability="canAccessAdminConsole">
+              <AdminConsole />
+            </RoleRoute>
+          </ProtectedRoute>
+        }
       />
       <Route 
         path="/attendance" 
@@ -121,6 +160,16 @@ const AppRoutes = () => {
           </ProtectedRoute>
         } 
       />
+      <Route
+        path="/salary-advances"
+        element={
+          <ProtectedRoute>
+            <RoleRoute capability="canViewSalaryAdvances">
+              <SalaryAdvances />
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      />
       <Route 
         path="/leave-requests" 
         element={
@@ -133,7 +182,9 @@ const AppRoutes = () => {
         path="/recruitment" 
         element={
           <ProtectedRoute>
-            <Recruitment />
+            <RoleRoute capability="canRecruit">
+              <Recruitment />
+            </RoleRoute>
           </ProtectedRoute>
         } 
       />
@@ -144,6 +195,14 @@ const AppRoutes = () => {
             <Profile />
           </ProtectedRoute>
         } 
+      />
+      <Route
+        path="/chat"
+        element={
+          <ProtectedRoute>
+            <Chat />
+          </ProtectedRoute>
+        }
       />
       <Route 
         path="/settings" 
@@ -177,7 +236,7 @@ const AppRoutes = () => {
           </ProtectedRoute>
         } 
       />
-            <Route 
+      <Route 
         path="/my-devices" 
         element={
           <ProtectedRoute>
@@ -189,7 +248,9 @@ const AppRoutes = () => {
         path="/device-management" 
         element={
           <ProtectedRoute>
-            <HRDeviceManagement />
+            <RoleRoute capability="canManageDevices">
+              <HRDeviceManagement />
+            </RoleRoute>
           </ProtectedRoute>
         } 
       />
@@ -203,25 +264,27 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider>
       <AuthProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <ToastContainer
-            position="top-right"
-            autoClose={3000}
-            hideProgressBar={false}
-            newestOnTop
-            closeOnClick
-            rtl={false}
-            pauseOnFocusLoss
-            draggable
-            pauseOnHover
-            theme="light"
-          />
-          <BrowserRouter>
-            <AppRoutes />
-          </BrowserRouter>
-        </TooltipProvider>
+        <NotificationProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <ToastContainer
+              position="top-right"
+              autoClose={3000}
+              hideProgressBar={false}
+              newestOnTop
+              closeOnClick
+              rtl={false}
+              pauseOnFocusLoss
+              draggable
+              pauseOnHover
+              theme="light"
+            />
+            <BrowserRouter>
+              <AppRoutes />
+            </BrowserRouter>
+          </TooltipProvider>
+        </NotificationProvider>
       </AuthProvider>
     </ThemeProvider>
   </QueryClientProvider>

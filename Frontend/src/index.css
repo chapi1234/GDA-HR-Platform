@@ -68,16 +68,16 @@ Corporate blue theme with modern gradients and professional styling.
     --input: 217 32% 89%;
     --ring: 217 91% 45%;
 
-    /* Corporate gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(217 91% 45%), hsl(217 91% 55%));
-    --gradient-secondary: linear-gradient(135deg, hsl(217 32% 95%), hsl(250 60% 98%));
-    --gradient-hero: linear-gradient(135deg, hsl(217 91% 45%), hsl(210 100% 50%));
-    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%), hsl(217 32% 98%));
+    /* Corporate gradients — derived from --primary so color schemes apply */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-light)));
+    --gradient-secondary: linear-gradient(135deg, hsl(var(--secondary)), hsl(var(--background)));
+    --gradient-hero: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-light)));
+    --gradient-card: linear-gradient(145deg, hsl(var(--card)), hsl(var(--muted)));
 
-    /* Shadows for depth */
-    --shadow-card: 0 4px 12px hsl(217 91% 45% / 0.08);
-    --shadow-card-hover: 0 8px 25px hsl(217 91% 45% / 0.12);
-    --shadow-header: 0 2px 8px hsl(217 91% 45% / 0.06);
+    /* Shadows for depth — tinted by primary */
+    --shadow-card: 0 4px 12px hsl(var(--primary) / 0.08);
+    --shadow-card-hover: 0 8px 25px hsl(var(--primary) / 0.12);
+    --shadow-header: 0 2px 8px hsl(var(--primary) / 0.06);
 
     /* Border radius */
     --radius: 0.75rem;
@@ -136,11 +136,11 @@ Corporate blue theme with modern gradients and professional styling.
     --input: 228 32% 18%;
     --ring: 217 91% 55%;
 
-    /* Corporate gradients for dark mode */
-    --gradient-primary: linear-gradient(135deg, hsl(217 91% 55%), hsl(217 91% 65%));
-    --gradient-secondary: linear-gradient(135deg, hsl(228 32% 15%), hsl(228 84% 8%));
-    --gradient-hero: linear-gradient(135deg, hsl(217 91% 55%), hsl(210 100% 60%));
-    --gradient-card: linear-gradient(145deg, hsl(228 84% 8%), hsl(228 32% 10%));
+    /* Corporate gradients for dark mode — follow --primary */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-light)));
+    --gradient-secondary: linear-gradient(135deg, hsl(var(--secondary)), hsl(var(--card)));
+    --gradient-hero: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-light)));
+    --gradient-card: linear-gradient(145deg, hsl(var(--card)), hsl(var(--muted)));
 
     /* Dark mode shadows */
     --shadow-card: 0 4px 12px hsl(228 84% 4% / 0.3);
@@ -175,41 +175,71 @@ Corporate blue theme with modern gradients and professional styling.
     border-color: hsl(var(--border));
   }
 
-  /* Color Scheme Variants */
+  /* Color Scheme Variants — also sync ring, accent, sidebar, gradients */
   [data-color-scheme="blue"] {
     --primary: 217 91% 45%;
     --primary-light: 217 91% 55%;
     --primary-dark: 217 91% 35%;
+    --ring: 217 91% 45%;
+    --accent-foreground: 217 91% 45%;
+    --sidebar-primary: 217 91% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-ring: 217 91% 45%;
   }
 
   [data-color-scheme="green"] {
     --primary: 142 76% 36%;
     --primary-light: 142 76% 46%;
     --primary-dark: 142 76% 26%;
+    --ring: 142 76% 36%;
+    --accent-foreground: 142 76% 36%;
+    --sidebar-primary: 142 76% 36%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-ring: 142 76% 36%;
   }
 
   [data-color-scheme="purple"] {
     --primary: 262 83% 58%;
     --primary-light: 262 83% 68%;
     --primary-dark: 262 83% 48%;
+    --ring: 262 83% 58%;
+    --accent-foreground: 262 83% 58%;
+    --sidebar-primary: 262 83% 58%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-ring: 262 83% 58%;
   }
 
   [data-color-scheme="orange"] {
     --primary: 25 95% 53%;
     --primary-light: 25 95% 63%;
     --primary-dark: 25 95% 43%;
+    --ring: 25 95% 53%;
+    --accent-foreground: 25 95% 53%;
+    --sidebar-primary: 25 95% 53%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-ring: 25 95% 53%;
   }
 
   [data-color-scheme="red"] {
     --primary: 0 84% 60%;
     --primary-light: 0 84% 70%;
     --primary-dark: 0 84% 50%;
+    --ring: 0 84% 60%;
+    --accent-foreground: 0 84% 60%;
+    --sidebar-primary: 0 84% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-ring: 0 84% 60%;
   }
 
   [data-color-scheme="teal"] {
-    --primary: 178 78% 57%;
-    --primary-light: 178 78% 67%;
-    --primary-dark: 178 78% 47%;
+    --primary: 178 78% 40%;
+    --primary-light: 178 78% 50%;
+    --primary-dark: 178 78% 32%;
+    --ring: 178 78% 40%;
+    --accent-foreground: 178 78% 40%;
+    --sidebar-primary: 178 78% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-ring: 178 78% 40%;
   }
 
   /* Dark mode color scheme variants */
@@ -217,36 +247,81 @@ Corporate blue theme with modern gradients and professional styling.
     --primary: 217 91% 55%;
     --primary-light: 217 91% 65%;
     --primary-dark: 217 91% 45%;
+    --ring: 217 91% 55%;
+    --accent-foreground: 217 91% 55%;
+    --sidebar-primary: 217 91% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-ring: 217 91% 55%;
   }
 
   .dark[data-color-scheme="green"] {
     --primary: 142 76% 45%;
     --primary-light: 142 76% 55%;
     --primary-dark: 142 76% 35%;
+    --ring: 142 76% 45%;
+    --accent-foreground: 142 76% 45%;
+    --sidebar-primary: 142 76% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-ring: 142 76% 45%;
   }
 
   .dark[data-color-scheme="purple"] {
     --primary: 262 83% 68%;
     --primary-light: 262 83% 78%;
     --primary-dark: 262 83% 58%;
+    --ring: 262 83% 68%;
+    --accent-foreground: 262 83% 68%;
+    --sidebar-primary: 262 83% 68%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-ring: 262 83% 68%;
   }
 
   .dark[data-color-scheme="orange"] {
     --primary: 25 95% 63%;
     --primary-light: 25 95% 73%;
     --primary-dark: 25 95% 53%;
+    --ring: 25 95% 63%;
+    --accent-foreground: 25 95% 63%;
+    --sidebar-primary: 25 95% 63%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-ring: 25 95% 63%;
   }
 
   .dark[data-color-scheme="red"] {
     --primary: 0 84% 70%;
     --primary-light: 0 84% 80%;
     --primary-dark: 0 84% 60%;
+    --ring: 0 84% 70%;
+    --accent-foreground: 0 84% 70%;
+    --sidebar-primary: 0 84% 70%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-ring: 0 84% 70%;
   }
 
   .dark[data-color-scheme="teal"] {
-    --primary: 178 78% 67%;
-    --primary-light: 178 78% 77%;
-    --primary-dark: 178 78% 57%;
+    --primary: 178 78% 55%;
+    --primary-light: 178 78% 65%;
+    --primary-dark: 178 78% 45%;
+    --ring: 178 78% 55%;
+    --accent-foreground: 178 78% 55%;
+    --sidebar-primary: 178 78% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-ring: 178 78% 55%;
+  }
+
+  /* Re-bind gradients whenever scheme/theme changes (late-bound to --primary) */
+  html {
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-light)));
+    --gradient-hero: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-light)));
+    --shadow-card: 0 4px 12px hsl(var(--primary) / 0.08);
+    --shadow-card-hover: 0 8px 25px hsl(var(--primary) / 0.12);
+    --shadow-header: 0 2px 8px hsl(var(--primary) / 0.06);
+  }
+
+  html.dark {
+    --shadow-card: 0 4px 12px hsl(0 0% 0% / 0.35);
+    --shadow-card-hover: 0 8px 25px hsl(0 0% 0% / 0.45);
+    --shadow-header: 0 2px 8px hsl(0 0% 0% / 0.25);
   }
 
   /* Font Size Variants */
@@ -301,6 +376,37 @@ Corporate blue theme with modern gradients and professional styling.
   /* Form input enhancements */
   .form-input {
     @apply transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary;
+  }
+
+  /* Auth pages: neutral surface that follows light/dark; primary from color scheme for buttons/links */
+  .auth-shell {
+    color: hsl(var(--foreground));
+    background-color: hsl(var(--background));
+    background-image:
+      radial-gradient(
+        ellipse 90% 55% at 50% -20%,
+        hsl(var(--primary) / 0.1),
+        transparent 58%
+      ),
+      linear-gradient(
+        180deg,
+        hsl(var(--background)) 0%,
+        hsl(var(--muted)) 100%
+      );
+  }
+
+  .dark .auth-shell {
+    background-image:
+      radial-gradient(
+        ellipse 90% 55% at 50% -20%,
+        hsl(var(--primary) / 0.18),
+        transparent 58%
+      ),
+      linear-gradient(
+        180deg,
+        hsl(var(--background)) 0%,
+        hsl(var(--card)) 100%
+      );
   }
 
   /* Button enhancements */
