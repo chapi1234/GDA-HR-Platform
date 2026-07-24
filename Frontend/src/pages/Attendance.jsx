@@ -15,10 +15,18 @@ import { cn } from '../lib/utils';
 import { format } from 'date-fns';
 import {
   Clock, Calendar as CalendarIcon, UserCheck, UserX, Search, 
-  Filter, Download, TrendingUp, CheckCircle, XCircle, AlertCircle
+  Filter, Download, TrendingUp, CheckCircle, XCircle, AlertCircle,
+  ChevronLeft, ChevronRight, ChevronDown
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import axios from 'axios';
+import { exportTableExcel } from '../utils/exportExcel';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../components/ui/dropdown-menu';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const Attendance = () => {
@@ -40,7 +48,9 @@ const Attendance = () => {
     width: "200px"
   };
 
-  const { user, isHR } = useAuth();
+  const { user, canManage } = useAuth();
+  // Managers and above see team roster; employees see personal view
+  const teamView = canManage;
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -51,8 +61,21 @@ const Attendance = () => {
 
   const [attendanceRecords, setAttendanceRecords] = useState([]); // HR date-based list
   const [attendanceStats, setAttendanceStats] = useState(null);
-  const [userAttendance, setUserAttendance] = useState([]); // Employee history
+  const [userAttendance, setUserAttendance] = useState([]); // Employee history (current page)
+  const [historyWeekRecords, setHistoryWeekRecords] = useState([]); // Recent records for week/today cards
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyPagination, setHistoryPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 1,
+    hasNext: false,
+    hasPrev: false,
+  });
   const [loading, setLoading] = useState(false);
+  const HISTORY_PAGE_SIZE = 10;
+  const TEAM_PAGE_SIZE = 10;
+  const [teamPage, setTeamPage] = useState(1);
 
   const isoDate = (d) => {
     // local YYYY-MM-DD (avoid timezone-induced off-by-one)
@@ -81,7 +104,7 @@ const Attendance = () => {
   const [checkOutLoading, setCheckOutLoading] = useState(false);
 
   const fetchByDate = async (dateObj) => {
-    if (!token || !isHR) return;
+    if (!token || !teamView) return;
     setLoading(true);
     try {
       const res = await axios.get(`${API_BASE}/api/attendance`, {
@@ -98,23 +121,43 @@ const Attendance = () => {
     }
   };
 
-  const fetchMyHistory = async () => {
+  const fetchMyHistory = async (page = 1) => {
     if (!token) return;
     try {
       const res = await axios.get(`${API_BASE}/api/attendance/me`, {
-        params: { limit: 30 },
+        params: { limit: HISTORY_PAGE_SIZE, page },
         headers: { Authorization: `Bearer ${token}` },
       });
       setUserAttendance(Array.isArray(res.data?.data) ? res.data.data : []);
+      if (res.data?.pagination) {
+        setHistoryPagination(res.data.pagination);
+        setHistoryPage(res.data.pagination.page || page);
+      } else {
+        setHistoryPage(page);
+      }
     } catch (err) {
       console.error(err);
       // non-blocking
     }
   };
 
+  /** Recent records for today status + week summary (not paginated UI) */
+  const fetchHistorySummary = async () => {
+    if (!token || teamView) return;
+    try {
+      const res = await axios.get(`${API_BASE}/api/attendance/me`, {
+        params: { limit: 14, page: 1 },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setHistoryWeekRecords(Array.isArray(res.data?.data) ? res.data.data : []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const refreshStats = async (dateObj) => {
     // Only HR needs org-wide stats
-    if (!token || !isHR) return;
+    if (!token || !teamView) return;
     try {
       const res = await axios.get(`${API_BASE}/api/attendance/stats`, {
         params: { date: isoDate(dateObj || selectedDate) },
@@ -127,23 +170,146 @@ const Attendance = () => {
   };
 
   useEffect(() => {
-    if (isHR) fetchByDate(selectedDate);
-    fetchMyHistory();
+    if (teamView) fetchByDate(selectedDate);
+    fetchMyHistory(1);
+    fetchHistorySummary();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isHR, token]);
+  }, [teamView, token]);
 
   useEffect(() => {
-    if (isHR) fetchByDate(selectedDate);
+    if (teamView) fetchByDate(selectedDate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate]);
 
-  const filteredRecords = attendanceRecords.filter(record => {
-    const matchesSearch = record.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         record.department.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         record.employeeId.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFilter = filterStatus === 'all' || record.status === filterStatus;
-    return matchesSearch && matchesFilter;
-  });
+  const filteredRecords = attendanceRecords
+    .filter((record) => {
+      const name = String(record.employeeName || '').toLowerCase();
+      const dept = String(record.department || '').toLowerCase();
+      const empId = String(record.employeeId || '').toLowerCase();
+      const q = searchTerm.toLowerCase();
+      const matchesSearch =
+        name.includes(q) || dept.includes(q) || empId.includes(q);
+      const matchesFilter = filterStatus === 'all' || record.status === filterStatus;
+      return matchesSearch && matchesFilter;
+    })
+    .sort((a, b) =>
+      String(a.employeeName || '').localeCompare(String(b.employeeName || ''), undefined, {
+        sensitivity: 'base',
+      })
+    );
+
+  // Reset to first page when filters / date / dataset change
+  useEffect(() => {
+    setTeamPage(1);
+  }, [searchTerm, filterStatus, selectedDate, attendanceRecords.length]);
+
+  const teamTotalPages = Math.max(1, Math.ceil(filteredRecords.length / TEAM_PAGE_SIZE));
+  const safeTeamPage = Math.min(teamPage, teamTotalPages);
+  const teamPageStart = (safeTeamPage - 1) * TEAM_PAGE_SIZE;
+  const pagedTeamRecords = filteredRecords.slice(
+    teamPageStart,
+    teamPageStart + TEAM_PAGE_SIZE
+  );
+
+  const handleExportDaily = () => {
+    if (!filteredRecords.length) {
+      toast.warn('No attendance records to export for this date');
+      return;
+    }
+    const dateLabel = format(selectedDate, 'yyyy-MM-dd');
+    const headers = [
+      'No',
+      'Employee',
+      'Employee ID',
+      'Unit / Sector',
+      'Check In',
+      'Check Out',
+      'Working Hours',
+      'Location',
+      'Status',
+    ];
+    const rows = filteredRecords.map((r, i) => [
+      i + 1,
+      r.employeeName || '',
+      r.employeeId || '',
+      r.department || '',
+      r.checkIn || '',
+      r.checkOut || '',
+      r.workingHours || r.hours || '',
+      r.location || '',
+      r.status || '',
+    ]);
+    exportTableExcel({
+      title: 'Gamo Development Association — Daily Attendance',
+      subtitle: `Date: ${format(selectedDate, 'PPP')} · ${filteredRecords.length} record(s)`,
+      headers,
+      rows,
+      sheetName: 'Daily',
+      filename: `GaDA-Attendance-Daily-${dateLabel}.xlsx`,
+    });
+    toast.success('Daily attendance Excel downloaded');
+  };
+
+  const handleExportMonthly = async () => {
+    if (!token) return;
+    const monthKey = format(selectedDate, 'yyyy-MM');
+    const monthLabel = format(selectedDate, 'MMMM yyyy');
+    try {
+      toast.info('Building monthly attendance report…');
+      const res = await axios.get(`${API_BASE}/api/attendance/monthly-report`, {
+        params: { month: monthKey },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const rowsData = Array.isArray(res.data?.data) ? res.data.data : [];
+      if (!rowsData.length) {
+        toast.warn('No employees found for monthly report');
+        return;
+      }
+      const workingDays = res.data?.meta?.workingDays ?? '';
+      const headers = [
+        'No',
+        'Employee',
+        'Employee ID',
+        'Unit / Sector',
+        'Working Days',
+        'Present',
+        'Late',
+        'Leave',
+        'Absent',
+        'Days Attended',
+        'Hours Worked',
+        'Attendance Rate %',
+      ];
+      const rows = rowsData.map((r, i) => [
+        i + 1,
+        r.employeeName || '',
+        r.employeeId || '',
+        r.department || '',
+        r.workingDays ?? workingDays,
+        r.present ?? 0,
+        r.late ?? 0,
+        r.leave ?? 0,
+        r.absent ?? 0,
+        r.daysAttended ?? 0,
+        r.totalHours || '0h 00m',
+        r.attendanceRate ?? 0,
+      ]);
+      exportTableExcel({
+        title: 'Gamo Development Association — Monthly Attendance Summary',
+        subtitle: `Period: ${monthLabel} · Working days: ${workingDays} · ${rowsData.length} employee(s)`,
+        headers,
+        rows,
+        sheetName: 'Monthly',
+        filename: `GaDA-Attendance-Monthly-${monthKey}.xlsx`,
+      });
+      toast.success('Monthly attendance Excel downloaded');
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.message || 'Monthly export failed');
+    }
+  };
+  const teamHasPrev = safeTeamPage > 1;
+  const teamHasNext = safeTeamPage < teamTotalPages;
 
   const getStatusBadge = (status) => {
     switch (status) {
@@ -180,6 +346,24 @@ const Attendance = () => {
     }
   };
 
+  const upsertLocalAttendance = (rec, today) => {
+    const merge = (prev) => {
+      try {
+        const idx = prev.findIndex(r => normalizeRecordDate(r?.date) === today);
+        if (idx !== -1) {
+          const copy = [...prev];
+          copy[idx] = { ...copy[idx], ...rec };
+          return copy;
+        }
+        return [rec, ...prev];
+      } catch (e) {
+        return prev;
+      }
+    };
+    setUserAttendance(merge);
+    setHistoryWeekRecords(merge);
+  };
+
   const handleMarkAttendance = async () => {
     if (checkInLoading) return;
     setCheckInLoading(true);
@@ -191,23 +375,13 @@ const Attendance = () => {
       const newRec = res.data?.data;
       const today = isoDate(new Date());
       if (newRec) {
-        setUserAttendance(prev => {
-          try {
-            const idx = prev.findIndex(r => normalizeRecordDate(r?.date) === today);
-            if (idx !== -1) {
-              const copy = [...prev];
-              copy[idx] = { ...copy[idx], ...newRec };
-              return copy;
-            }
-            return [newRec, ...prev];
-          } catch (e) { return prev; }
-        });
+        upsertLocalAttendance(newRec, today);
         setCheckedOutToday(!!(newRec.checkOut));
       } else {
-        await fetchMyHistory();
+        await Promise.all([fetchMyHistory(historyPage), fetchHistorySummary()]);
       }
       // server-side activity will create the activity; no client post to avoid duplicates
-      if (isHR) {
+      if (teamView) {
         fetchByDate(selectedDate);
         await refreshStats(selectedDate);
       }
@@ -230,23 +404,13 @@ const Attendance = () => {
       const updated = res.data?.data;
       const today = isoDate(new Date());
       if (updated) {
-        setUserAttendance(prev => {
-          try {
-            const idx = prev.findIndex(r => normalizeRecordDate(r?.date) === today);
-            if (idx !== -1) {
-              const copy = [...prev];
-              copy[idx] = { ...copy[idx], ...updated };
-              return copy;
-            }
-            return [updated, ...prev];
-          } catch (e) { return prev; }
-        });
+        upsertLocalAttendance(updated, today);
         setCheckedOutToday(true);
       } else {
-        await fetchMyHistory();
+        await Promise.all([fetchMyHistory(historyPage), fetchHistorySummary()]);
       }
       // server-side activity will create the activity; no client post to avoid duplicates
-      if (isHR) {
+      if (teamView) {
         fetchByDate(selectedDate);
         await refreshStats(selectedDate);
       }
@@ -258,15 +422,18 @@ const Attendance = () => {
     }
   };
 
+  // Prefer recent summary fetch for cards; fall back to current history page
+  const summaryRecords = historyWeekRecords.length ? historyWeekRecords : userAttendance;
+
   // Personal today's status for non-HR user
   const myTodayStatus = useMemo(() => {
     const todayStrLocal = isoDate(selectedDate);
-    const rec = userAttendance.find(r => normalizeRecordDate(r?.date) === todayStrLocal);
+    const rec = summaryRecords.find(r => normalizeRecordDate(r?.date) === todayStrLocal);
     return rec?.status || 'absent';
-  }, [userAttendance, selectedDate]);
+  }, [summaryRecords, selectedDate]);
 
   const todayStats = useMemo(() => {
-    if (isHR) {
+    if (teamView) {
       return (
         attendanceStats || {
           present: attendanceRecords.filter(r => r.status === 'present').length,
@@ -284,7 +451,7 @@ const Attendance = () => {
       absent: myTodayStatus === 'absent' ? 1 : 0,
       total: 1
     };
-  }, [isHR, attendanceStats, attendanceRecords, myTodayStatus]);
+  }, [teamView, attendanceStats, attendanceRecords, myTodayStatus]);
 
   const attendanceRate = ((todayStats.present + todayStats.late) / todayStats.total * 100).toFixed(1);
 
@@ -346,7 +513,7 @@ const Attendance = () => {
     }
 
     // Filter my records within week bounds
-    const weekRecords = userAttendance.filter(r => {
+    const weekRecords = summaryRecords.filter(r => {
       const d = new Date(r.date);
       return d >= start && d <= capEnd;
     });
@@ -375,11 +542,11 @@ const Attendance = () => {
       avgCheckIn: minutesTo12h(avgCheckInMins),
       attendanceRate,
     };
-  }, [userAttendance]);
+  }, [summaryRecords]);
 
   // Helpers for button states (today)
   const todayStr = isoDate(new Date());
-  const todayRec = useMemo(() => userAttendance.find(r => normalizeRecordDate(r?.date) === todayStr), [userAttendance, todayStr]);
+  const todayRec = useMemo(() => summaryRecords.find(r => normalizeRecordDate(r?.date) === todayStr), [summaryRecords, todayStr]);
 
   // Track if checked out today for button color
   const [checkedOutToday, setCheckedOutToday] = useState(false);
@@ -396,13 +563,13 @@ const Attendance = () => {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
         <div>
           <h1 className="text-3xl font-bold text-foreground">
-            {isHR ? 'Attendance Management' : 'My Attendance'}
+            {teamView ? 'Attendance Management' : 'My Attendance'}
           </h1>
           <p className="text-muted-foreground">
-            {isHR ? 'Monitor and manage employee attendance' : 'Track your attendance and working hours'}
+            {teamView ? 'Monitor and manage employee attendance' : 'Track your attendance and working hours'}
           </p>
         </div>
-        {isHR ? (
+        {teamView ? (
           <div className="flex gap-2">
             <Button onClick={handleMarkAttendance} className="btn-gradient" disabled={!canCheckIn} title={canCheckIn ? 'Mark my check-in' : 'Already checked in today'}>
               <Clock className="w-4 h-4 mr-2" />
@@ -505,7 +672,7 @@ const Attendance = () => {
         </div>
       </div>
 
-      {isHR ? (
+      {teamView ? (
         <>
           {/* Filters */}
           <Card style={marginStyle} className="dashboard-card">
@@ -562,12 +729,25 @@ const Attendance = () => {
                   </Popover>
                 </div>
 
-                {/* Export Button */}
-                <div className="flex-1 min-w-[250px] sm:min-w-[250px] md:min-w-[200px] lg:min-w-[200px]">
-                  <Button variant="outline" className="w-full">
-                    <Download className="w-4 h-4 mr-2" />
-                    Export
-                  </Button>
+                {/* Export: daily or monthly */}
+                <div className="flex-1 min-w-[250px] sm:min-w-[250px] md:min-w-[200px] lg:min-w-[220px]">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button type="button" variant="outline" className="w-full">
+                        <Download className="w-4 h-4 mr-2" />
+                        Export Excel
+                        <ChevronDown className="w-4 h-4 ml-2 opacity-70" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuItem onClick={handleExportDaily}>
+                        Daily — {format(selectedDate, 'MMM d, yyyy')}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={handleExportMonthly}>
+                        Monthly — {format(selectedDate, 'MMMM yyyy')}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
             </CardContent>
@@ -577,14 +757,22 @@ const Attendance = () => {
           <Card className="data-table">
             <CardHeader>
               <CardTitle>Today's Attendance</CardTitle>
-              <CardDescription>Employee attendance for {format(selectedDate, "PPP")}</CardDescription>
+              <CardDescription>
+                Employee attendance for {format(selectedDate, "PPP")}
+                {filteredRecords.length > 0
+                  ? ` · showing ${Math.min(teamPageStart + 1, filteredRecords.length)}–${Math.min(
+                      teamPageStart + TEAM_PAGE_SIZE,
+                      filteredRecords.length
+                    )} of ${filteredRecords.length} (A–Z by name)`
+                  : ''}
+              </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Employee</TableHead>
-                    <TableHead>Department</TableHead>
+                    <TableHead>Unit / Sector</TableHead>
                     <TableHead>Check In</TableHead>
                     <TableHead>Check Out</TableHead>
                     <TableHead>Working Hours</TableHead>
@@ -600,7 +788,16 @@ const Attendance = () => {
                       </TableCell>
                     </TableRow>
                   )}
-                  {!loading && filteredRecords.map((record) => (
+                  {!loading && filteredRecords.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7}>
+                        <p className="text-sm text-muted-foreground py-4 text-center">
+                          No attendance records found
+                        </p>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {!loading && pagedTeamRecords.map((record) => (
                     <TableRow key={record.id}>
                       <TableCell>
                         <div className="flex items-center space-x-3">
@@ -609,15 +806,19 @@ const Attendance = () => {
                               src={
                                 record.profileImage ||
                                 record.avatar ||
-                                `https://ui-avatars.com/api/?name=${encodeURIComponent(record.employeeName)}&background=0D8ABC&color=fff`
+                                `https://ui-avatars.com/api/?name=${encodeURIComponent(record.employeeName || '')}&background=0D8ABC&color=fff`
                               }
                               alt={record.employeeName}
                             />
-                            <AvatarFallback>{record.employeeName.split(' ').map(n => n[0]).join('')}</AvatarFallback>
+                            <AvatarFallback>
+                              {String(record.employeeName || '')
+                                .split(' ')
+                                .map((n) => n[0])
+                                .join('')}
+                            </AvatarFallback>
                           </Avatar>
                           <div>
                             <p className="font-medium">{record.employeeName}</p>
-                            {/* <p className="text-sm text-muted-foreground">{record.employeeId}</p> */}
                           </div>
                         </div>
                       </TableCell>
@@ -660,6 +861,34 @@ const Attendance = () => {
                   ))}
                 </TableBody>
               </Table>
+
+              {!loading && filteredRecords.length > TEAM_PAGE_SIZE && (
+                <div className="flex items-center justify-between gap-3 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!teamHasPrev}
+                    onClick={() => setTeamPage((p) => Math.max(1, Math.min(teamTotalPages, p) - 1))}
+                  >
+                    <ChevronLeft className="w-4 h-4 mr-1" />
+                    Previous
+                  </Button>
+                  <p className="text-sm text-muted-foreground">
+                    Page {safeTeamPage} of {teamTotalPages}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!teamHasNext}
+                    onClick={() => setTeamPage((p) => Math.min(teamTotalPages, Math.min(teamTotalPages, p) + 1))}
+                  >
+                    Next
+                    <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </>
@@ -745,9 +974,20 @@ const Attendance = () => {
           <Card className="data-table">
             <CardHeader>
               <CardTitle>My Attendance History</CardTitle>
-              <CardDescription>Your recent attendance records</CardDescription>
+              <CardDescription>
+                Your recent attendance records
+                {historyPagination.total > 0
+                  ? ` · showing ${Math.min(
+                      (historyPagination.page - 1) * historyPagination.limit + 1,
+                      historyPagination.total
+                    )}–${Math.min(
+                      historyPagination.page * historyPagination.limit,
+                      historyPagination.total
+                    )} of ${historyPagination.total}`
+                  : ''}
+              </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -759,54 +999,85 @@ const Attendance = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {userAttendance.map((record, index) => (
-                    <TableRow key={index}>
-                      <TableCell className="font-medium">
-                        {format(new Date(record.date), "MMM dd, yyyy")}
+                  {userAttendance.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5}>
+                        <p className="text-sm text-muted-foreground py-4 text-center">
+                          No attendance records yet
+                        </p>
                       </TableCell>
-                      <TableCell>
-                        {record.checkIn ? (
-                          <span className="text-success">{record.checkIn}</span>
-                        ) : (
-                          <span className="text-muted-foreground">--</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {record.checkOut ? (
-                          <span className="text-success">{record.checkOut}</span>
-                        ) : record.checkIn ? (
-                          <span className="text-warning">Working...</span>
-                        ) : (
-                          <span className="text-muted-foreground">--</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <span className={cn(
-                          "font-medium",
-                          record.status === 'present' ? "text-success" :
-                          record.status === 'late' ? "text-warning" :
-                          "text-muted-foreground"
-                        )}>
-                          {record.workingHours || record.hours}
-                        </span>
-                      </TableCell>
-                      <TableCell>{getStatusBadge(record.status)}</TableCell>
                     </TableRow>
-                  ))}
+                  ) : (
+                    userAttendance.map((record, index) => (
+                      <TableRow key={record.id || `${record.date}-${index}`}>
+                        <TableCell className="font-medium">
+                          {format(new Date(record.date), "MMM dd, yyyy")}
+                        </TableCell>
+                        <TableCell>
+                          {record.checkIn ? (
+                            <span className="text-success">{record.checkIn}</span>
+                          ) : (
+                            <span className="text-muted-foreground">--</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {record.checkOut ? (
+                            <span className="text-success">{record.checkOut}</span>
+                          ) : record.checkIn ? (
+                            <span className="text-warning">Working...</span>
+                          ) : (
+                            <span className="text-muted-foreground">--</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <span className={cn(
+                            "font-medium",
+                            record.status === 'present' ? "text-success" :
+                            record.status === 'late' ? "text-warning" :
+                            "text-muted-foreground"
+                          )}>
+                            {record.workingHours || record.hours}
+                          </span>
+                        </TableCell>
+                        <TableCell>{getStatusBadge(record.status)}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
+
+              {historyPagination.totalPages > 1 && (
+                <div className="flex items-center justify-between gap-3 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!historyPagination.hasPrev}
+                    onClick={() => fetchMyHistory(historyPage - 1)}
+                  >
+                    <ChevronLeft className="w-4 h-4 mr-1" />
+                    Previous
+                  </Button>
+                  <p className="text-sm text-muted-foreground">
+                    Page {historyPagination.page} of {historyPagination.totalPages}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!historyPagination.hasNext}
+                    onClick={() => fetchMyHistory(historyPage + 1)}
+                  >
+                    Next
+                    <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </>
       )}
 
-      {filteredRecords.length === 0 && isHR && (
-        <div className="text-center py-12">
-          <UserCheck className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-semibold mb-2">No attendance records found</h3>
-          <p className="text-muted-foreground">Try adjusting your search or date filters</p>
-        </div>
-      )}
     </div>
   );
 };
