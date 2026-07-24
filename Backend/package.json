@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "seed": "node scripts/seedDemoData.js",
+    "seed": "node scripts/seedSectors.js",
+    "seed:sectors": "node scripts/seedSectors.js",
     "start": "nodemon index.js",
     "dev": "nodemon index.js"
   },
@@ -31,7 +32,8 @@
     "multer": "^2.0.2",
     "multer-storage-cloudinary": "^4.0.0",
     "nodemailer": "^7.0.5",
-    "puppeteer": "^24.29.1"
+    "puppeteer": "^24.29.1",
+    "socket.io": "^4.8.3"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"
