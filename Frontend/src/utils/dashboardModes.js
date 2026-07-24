@@ -1,5 +1,5 @@
 /**
- * Dashboard mode config — one mode per exact role (see modification.md §6.1).
+ * Dashboard mode config — one mode per exact role.
  */
 
 export const DASHBOARD_MODES = {

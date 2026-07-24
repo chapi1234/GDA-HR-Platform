@@ -5,8 +5,6 @@
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "seed": "node scripts/seedSectors.js",
-    "seed:sectors": "node scripts/seedSectors.js",
     "start": "nodemon index.js",
     "dev": "nodemon index.js"
   },
