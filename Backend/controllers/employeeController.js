@@ -1,58 +1,145 @@
 import Employee from "../models/Employee.js";
 import Department from "../models/Department.js";
+import Sector from "../models/Sector.js";
 import getRemoveEmployeeMailOptions from "../Email/removeEmployee.js";
 import getAddEmployeeMailOptions from "../Email/addEmployee.js";
 import bcrypt from "bcryptjs";
 import { sendEmail } from "../Email/sendEmail.js";
 import { recalcDepartmentStats } from "../utils/departmentStats.js";
+import {
+  employeeScopeFilter,
+  canAccessEmployee,
+  allowedRolesToCreate,
+  placementWithinActorScope,
+} from "../utils/scope.js";
+import { resolveOrgPlacement } from "../utils/sectorAssign.js";
+import { canAssignOrganizationScope, ROLES } from "../utils/roles.js";
 
 const toId = (val) => {
   if (!val) return null;
   try { return typeof val === 'string' ? val : String(val); } catch { return null; }
 };
 
+/** Keep only entries that have a company name */
+function sanitizeWorkHistory(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((w) => ({
+      company: String(w?.company || "").trim(),
+      position: String(w?.position || "").trim(),
+      startDate: String(w?.startDate || "").trim(),
+      endDate: String(w?.endDate || "").trim(),
+      description: String(w?.description || "").trim(),
+    }))
+    .filter((w) => w.company);
+}
+
+function toDateOnly(value) {
+  if (!value) return "";
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toISOString().split("T")[0];
+}
+
+function mapEmployee(emp) {
+  const unitPath =
+    emp.subSubSectorId?.pathNames?.join(" › ") ||
+    emp.subSectorId?.pathNames?.join(" › ") ||
+    emp.sectorId?.pathNames?.join(" › ") ||
+    emp.department?.name ||
+    "";
+
+  // Prefer explicit join date (startDate); otherwise use account creation day
+  const joinDate = toDateOnly(emp.startDate) || toDateOnly(emp.createdAt);
+
+  return {
+    id: emp._id,
+    name: emp.name,
+    email: emp.email,
+    phone: emp.phone,
+    department: emp.department?.name || unitPath,
+    departmentId: emp.department?._id || null,
+    sectorId: emp.sectorId?._id || emp.sectorId || null,
+    subSectorId: emp.subSectorId?._id || emp.subSectorId || null,
+    subSubSectorId: emp.subSubSectorId?._id || emp.subSubSectorId || null,
+    scopeLevel: emp.scopeLevel,
+    unitPath,
+    position: emp.position,
+    salary: emp.salary,
+    bankName: emp.bankName || "",
+    bankAccountName: emp.bankAccountName || "",
+    bankAccountNumber: emp.bankAccountNumber || "",
+    bankBranch: emp.bankBranch || "",
+    joinDate,
+    createdAt: toDateOnly(emp.createdAt),
+    status: emp.status,
+    avatar:
+      emp.profileImage ||
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.name)}&background=3b82f6&color=fff`,
+    address: emp.address,
+    employeeId: emp.employeeId || "",
+    role: emp.role || "employee",
+    gender: emp.gender || "",
+    dateOfBirth: toDateOnly(emp.dateOfBirth),
+    emergencyContact: emp.emergencyContact || "",
+    emergencyPhone: emp.emergencyPhone || "",
+    nationalId: emp.nationalId || "",
+    gradeLevel: emp.gradeLevel || "",
+    education: emp.education || [],
+    workHistory: Array.isArray(emp.workHistory)
+      ? emp.workHistory.map((w) => ({
+          company: w.company || "",
+          position: w.position || "",
+          startDate: w.startDate || "",
+          endDate: w.endDate || "",
+          description: w.description || "",
+        }))
+      : [],
+    bio: emp.bio || "",
+    skills: emp.skills || "",
+    payType: emp.payType || "salary",
+    endDate: toDateOnly(emp.endDate),
+  };
+}
+
 export const getAllEmployees = async (req, res) => {
   try {
-    const employees = await Employee.find().populate({ path: 'department', select: 'name' });
-    if (!employees || employees.length === 0) {
-      return res.status(404).json({
-        status: false,
-        message: "No employees found",
-      });
+    // Prefer DB user for scope — JWT can be stale/incomplete after role changes
+    const actorId = req.user?._id || req.user?.id;
+    let actor = req.user;
+    if (actorId) {
+      const dbUser = await Employee.findById(actorId)
+        .select("role scopeLevel sectorId subSectorId subSubSectorId")
+        .lean();
+      if (dbUser) {
+        actor = {
+          ...req.user,
+          ...dbUser,
+          _id: dbUser._id,
+          role: dbUser.role,
+          scopeLevel: dbUser.scopeLevel,
+        };
+      }
     }
-    // Map to frontend shape
-    const mapped = employees.map(emp => ({
-      id: emp._id,
-      name: emp.name,
-      email: emp.email,
-      phone: emp.phone,
-      department: emp.department?.name || '',
-      departmentId: emp.department?._id || null,
-      position: emp.position,
-      salary: emp.salary,
-      joinDate: emp.startDate ? emp.startDate.toISOString().split('T')[0] : '',
-      status: emp.status,
-      avatar: emp.profileImage || `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.name)}&background=3b82f6&color=fff`,
-      address: emp.address,
-      employeeId: emp.employeeId || '',
-      role: emp.role || 'employee',
-      gender: emp.gender || '',
-      dateOfBirth: emp.dateOfBirth ? emp.dateOfBirth.toISOString().split('T')[0] : '',
-      emergencyContact: emp.emergencyContact || '',
-      emergencyPhone: emp.emergencyPhone || '',
-      nationalId: emp.nationalId || '',
-      gradeLevel: emp.gradeLevel || '',
-      education: emp.education || [],
-    }));
+
+    const scopeFilter = employeeScopeFilter(actor);
+    const employees = await Employee.find(scopeFilter)
+      .populate({ path: "department", select: "name" })
+      .populate({ path: "sectorId", select: "name pathNames level" })
+      .populate({ path: "subSectorId", select: "name pathNames level" })
+      .populate({ path: "subSubSectorId", select: "name pathNames level" })
+      .sort({ name: 1 });
+
     res.status(200).json({
       status: true,
       message: "Employees fetched successfully",
-      data: mapped,
+      data: (employees || []).map(mapEmployee),
     });
   } catch (error) {
+    console.error("getAllEmployees error:", error);
     res.status(500).json({
       status: false,
-      message: "Internal server error: " + error,
+      message: "Internal server error: " + (error?.message || error),
     });
   }
 };
@@ -60,34 +147,47 @@ export const getAllEmployees = async (req, res) => {
 export const getEmployeeById = async (req, res) => {
   const { id } = req.params;
   try {
-    const emp = await Employee.findById(id).populate({ path: 'department', select: 'name' });
-    if (!emp) {
-      return res.status(404).json({
-        status: false,
-        message: "Employee not found",
-      });
+    // Prefer DB user for scope — JWT can be stale/incomplete after role changes
+    const actorId = req.user?._id || req.user?.id;
+    let actor = req.user;
+    if (actorId) {
+      const dbUser = await Employee.findById(actorId)
+        .select("role scopeLevel sectorId subSectorId subSubSectorId")
+        .lean();
+      if (dbUser) {
+        actor = {
+          ...req.user,
+          ...dbUser,
+          _id: dbUser._id,
+          role: dbUser.role,
+          scopeLevel: dbUser.scopeLevel,
+        };
+      }
     }
-    // Map to frontend shape
-    const mapped = {
-      id: emp._id,
-      name: emp.name,
-      email: emp.email,
-      phone: emp.phone,
-      department: emp.department?.name || '',
-      departmentId: emp.department?._id || null,
-      position: emp.position,
-      salary: emp.salary,
-      joinDate: emp.startDate ? emp.startDate.toISOString().split('T')[0] : '',
-      status: emp.status,
-      avatar: emp.profileImage || `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.name)}&background=3b82f6&color=fff`,
-      address: emp.address,
-      employeeId: emp.employeeId || '',
-      role: emp.role || 'employee',
-    };
+
+    // Same visibility rules as the employees list
+    const scopeFilter = employeeScopeFilter(actor);
+    const emp = await Employee.findOne({ _id: id, ...scopeFilter })
+      .populate({ path: "department", select: "name" })
+      .populate({ path: "sectorId", select: "name pathNames level" })
+      .populate({ path: "subSectorId", select: "name pathNames level" })
+      .populate({ path: "subSubSectorId", select: "name pathNames level" });
+
+    if (!emp) {
+      const exists = await Employee.exists({ _id: id });
+      if (!exists) {
+        return res.status(404).json({
+          status: false,
+          message: "Employee not found",
+        });
+      }
+      return res.status(403).json({ status: false, message: "Access denied" });
+    }
+
     res.status(200).json({
       status: true,
       message: "Employee fetched successfully",
-      data: mapped,
+      data: mapEmployee(emp),
     });
   } catch (error) {
     res.status(500).json({
@@ -103,8 +203,8 @@ export const createEmployee = async (req, res) => {
     email,
     password,
     phone,
-    department, // accept name or id (legacy)
-    departmentId, // preferred id
+    department,
+    departmentId,
     salary,
     position,
     joinDate,
@@ -115,26 +215,124 @@ export const createEmployee = async (req, res) => {
     role,
     educationLevel,
     gradeLevel,
+    leafUnitId,
+    sectorId,
+    subSectorId,
+    subSubSectorId,
+    scopeLevel,
+    bankName,
+    bankAccountName,
+    bankAccountNumber,
+    workHistory,
   } = req.body;
 
   try {
-    if (!name || !email || !password || (!department && !departmentId)) {
+    if (!name || !email || !password) {
       return res.status(400).json({ status: false, message: "Please fill in all required fields" });
+    }
+
+    const requestedRole = role || ROLES.EMPLOYEE;
+    const allowed = allowedRolesToCreate(req.user);
+    if (!allowed.includes(requestedRole)) {
+      return res.status(403).json({
+        status: false,
+        message: `You cannot create users with role '${requestedRole}'`,
+      });
     }
 
     if (await Employee.exists({ email })) {
       return res.status(400).json({ status: false, message: "Employee with this email already exists" });
     }
 
-    // Resolve department ID
-    let depDoc = null;
-    if (departmentId) {
-      depDoc = await Department.findById(departmentId);
-    } else if (department) {
-      depDoc = await Department.findOne({ name: department });
+    let placement = null;
+    if (leafUnitId || sectorId || subSectorId || subSubSectorId) {
+      placement = await resolveOrgPlacement({
+        leafUnitId,
+        sectorId,
+        subSectorId,
+        subSubSectorId,
+        scopeLevel,
+      });
+      if (placement.error) {
+        return res.status(400).json({ status: false, message: placement.error });
+      }
     }
-    if (!depDoc) {
-      return res.status(400).json({ status: false, message: "Invalid department" });
+
+    // Admin / HR / Super Admin are always organization-wide
+    // Sector Lead is always sector-scoped and needs a sector placement
+    const isOrgRole =
+      requestedRole === ROLES.SUPERADMIN ||
+      requestedRole === ROLES.ADMIN ||
+      requestedRole === ROLES.HR ||
+      scopeLevel === "organization";
+
+    if (requestedRole === ROLES.SECTOR_LEAD) {
+      if (!placement?.sectorId) {
+        return res.status(400).json({
+          status: false,
+          message: "Sector Lead must be assigned to a top-level sector",
+        });
+      }
+    }
+
+    if (requestedRole === ROLES.MANAGER) {
+      if (!placement?.subSectorId) {
+        return res.status(400).json({
+          status: false,
+          message: "Manager must be assigned to a sub-sector",
+        });
+      }
+      if (placement.subSubSectorId) {
+        return res.status(400).json({
+          status: false,
+          message:
+            "Manager is for a sub-sector. Use Unit Manager for a sub-sub-sector",
+        });
+      }
+    }
+
+    if (requestedRole === ROLES.UNIT_MANAGER) {
+      if (!placement?.subSubSectorId) {
+        return res.status(400).json({
+          status: false,
+          message: "Unit Manager must be assigned to a sub-sub-sector",
+        });
+      }
+    }
+
+    if (isOrgRole && !canAssignOrganizationScope(req.user)) {
+      return res.status(403).json({
+        status: false,
+        message: "Only organization-wide Admin/HR or Super Admin can create org-wide accounts",
+      });
+    }
+
+    if (
+      !placementWithinActorScope(req.user, {
+        placement: placement || null,
+        isOrgRole,
+      })
+    ) {
+      return res.status(403).json({
+        status: false,
+        message: "You can only create users within your organizational unit",
+      });
+    }
+
+    let depDoc = null;
+    if (!placement && !isOrgRole) {
+      if (departmentId || department) {
+        if (departmentId) depDoc = await Department.findById(departmentId);
+        else depDoc = await Department.findOne({ name: department });
+        if (!depDoc) {
+          return res.status(400).json({ status: false, message: "Invalid organizational unit" });
+        }
+      } else {
+        return res.status(400).json({
+          status: false,
+          message: "Sector / sub-sector assignment is required for this role",
+        });
+      }
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -145,66 +343,99 @@ export const createEmployee = async (req, res) => {
       email,
       password: hashedPassword,
       phone,
-      department: depDoc._id,
+      department: depDoc?._id,
+      sectorId: isOrgRole ? null : placement?.sectorId || null,
+      subSectorId: isOrgRole ? null : placement?.subSectorId || null,
+      subSubSectorId: isOrgRole ? null : placement?.subSubSectorId || null,
+      scopeLevel: isOrgRole
+        ? "organization"
+        : requestedRole === ROLES.SECTOR_LEAD
+          ? "sector"
+          : requestedRole === ROLES.MANAGER
+            ? "sub_sector"
+            : requestedRole === ROLES.UNIT_MANAGER
+              ? "sub_sub_sector"
+              : placement?.scopeLevel || scopeLevel || "sub_sector",
       salary,
       position,
       address,
       status: status || "active",
       employeeId,
       profileImage: avatar,
-      startDate: joinDate,
-      role: role || "employee",
+      startDate: joinDate ? new Date(joinDate) : new Date(),
+      role: requestedRole,
+      // Sector Lead sits on the sector root (not a sub-unit)
+      ...(requestedRole === ROLES.SECTOR_LEAD
+        ? {
+            sectorId: placement.sectorId,
+            subSectorId: null,
+            subSubSectorId: null,
+          }
+        : {}),
+      ...(requestedRole === ROLES.MANAGER
+        ? {
+            sectorId: placement.sectorId,
+            subSectorId: placement.subSectorId,
+            subSubSectorId: null,
+          }
+        : {}),
+      ...(requestedRole === ROLES.UNIT_MANAGER
+        ? {
+            sectorId: placement.sectorId,
+            subSectorId: placement.subSectorId,
+            subSubSectorId: placement.subSubSectorId,
+          }
+        : {}),
       gradeLevel,
+      bankName: bankName || "Commercial Bank of Ethiopia",
+      bankAccountName: bankAccountName || name || "",
+      bankAccountNumber: bankAccountNumber || "",
       ...(educationLevel ? { education: [{ degree: educationLevel }] } : {}),
+      workHistory: sanitizeWorkHistory(workHistory),
     });
 
     await user.save();
 
-    // Increment department employee count
-  await Department.findByIdAndUpdate(depDoc._id, { $inc: { employeeCount: 1 } });
-  // Recalculate average salary for department
-    await recalcDepartmentStats(depDoc._id);
+    if (depDoc) {
+      await Department.findByIdAndUpdate(depDoc._id, { $inc: { employeeCount: 1 } });
+      await recalcDepartmentStats(depDoc._id);
+    }
+    if (placement?.unit) {
+      await Sector.findByIdAndUpdate(placement.unit._id, { $inc: { employeeCount: 1 } });
+    }
+
+    const unitLabel = placement?.pathLabel || depDoc?.name || "Organization";
 
     const emailResult = await sendEmail(
       getAddEmployeeMailOptions(
         user.email,
         user.name,
         user.position,
-        depDoc.name,
+        unitLabel,
         user.salary,
         password
       )
     );
 
-    // Map to frontend shape
-    const mapped = {
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      department: depDoc.name,
-      departmentId: depDoc._id,
-      position: user.position,
-      salary: user.salary,
-      joinDate: user.startDate ? user.startDate.toISOString().split('T')[0] : '',
-      status: user.status,
-      avatar: user.profileImage || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=3b82f6&color=fff`,
-      address: user.address,
-      employeeId: user.employeeId || '',
-      role: user.role || 'employee',
-    };
+    const populated = await Employee.findById(user._id)
+      .populate({ path: "department", select: "name" })
+      .populate({ path: "sectorId", select: "name pathNames level" })
+      .populate({ path: "subSectorId", select: "name pathNames level" })
+      .populate({ path: "subSubSectorId", select: "name pathNames level" });
+
     res.status(201).json({
       status: true,
       message: emailResult.sent
-        ? "Employee created successfully. Welcome email was accepted by the mail server."
-        : "Employee created successfully, but the welcome email could not be sent.",
+        ? "User created successfully. Welcome email was accepted by the mail server."
+        : "User created successfully, but the welcome email could not be sent.",
       emailSent: emailResult.sent,
       emailNotice: emailResult.sent
         ? `Welcome email queued for ${user.email}. Ask them to check inbox and spam.`
         : emailResult.error || "Welcome email failed to send.",
-      data: mapped,
+      data: mapEmployee(populated),
     });
   } catch (error) {
+    console.error("createEmployee error:", error);
     res.status(500).json({ status: false, message: "Internal server error: " + error });
   }
 };
@@ -222,48 +453,233 @@ export const updateEmployee = async (req, res) => {
     emergencyContact,
     emergencyPhone,
     nationalId,
+    bankName,
+    bankAccountName,
+    bankAccountNumber,
+    workHistory,
   } = req.body;
   try {
+    // Employees may only update their own profile via this route
+    const actorId = String(req.user?._id || req.user?.id || "");
+    if (actorId && String(id) !== actorId) {
+      const role = req.user?.role;
+      const canEditOthers =
+        role === "superadmin" || role === "admin" || role === "hr";
+      if (!canEditOthers) {
+        return res.status(403).json({
+          status: false,
+          message: "You can only update your own profile",
+        });
+      }
+    }
+
+    // Empty string / null breaks unique sparse indexes (nationalId) — unset instead
+    const nationalIdProvided = nationalId !== undefined;
+    const cleanNationalId = nationalIdProvided
+      ? String(nationalId || "").trim()
+      : undefined;
+    const cleanDob =
+      dateOfBirth === undefined
+        ? undefined
+        : String(dateOfBirth || "").trim() || null;
+
+    const update = {
+      name,
+      email,
+      phone,
+      ...(cleanDob !== undefined ? { dateOfBirth: cleanDob } : {}),
+      address,
+      bio,
+      skills,
+      emergencyContact,
+      emergencyPhone,
+      ...(cleanNationalId
+        ? { nationalId: cleanNationalId }
+        : {}),
+      ...(bankName !== undefined
+        ? { bankName: bankName || "Commercial Bank of Ethiopia" }
+        : {}),
+      ...(bankAccountName !== undefined ? { bankAccountName } : {}),
+      ...(bankAccountNumber !== undefined ? { bankAccountNumber } : {}),
+      ...(workHistory !== undefined
+        ? { workHistory: sanitizeWorkHistory(workHistory) }
+        : {}),
+    };
+
+    // Drop undefined so $set does not wipe unrelated fields
+    Object.keys(update).forEach((key) => {
+      if (update[key] === undefined) delete update[key];
+    });
+
+    const unset =
+      nationalIdProvided && !cleanNationalId ? { nationalId: 1 } : undefined;
+
     const employee = await Employee.findByIdAndUpdate(
       id,
       {
-        name,
-        email,
-        phone,
-        dateOfBirth,
-        address,
-        bio,
-        skills,
-        emergencyContact,
-        emergencyPhone,
-        nationalId,
+        $set: update,
+        ...(unset ? { $unset: unset } : {}),
       },
       { new: true }
     );
     if (!employee) {
       return res.status(404).json({ status: false, message: "Employee not found" });
     }
-    res.status(200).json({ status: true, message: "Employee updated successfully", data: employee });
+    res.status(200).json({
+      status: true,
+      message: "Employee updated successfully",
+      data: mapEmployee(employee),
+    });
   } catch (error) {
+    console.error("updateEmployee error:", error);
+    if (error?.code === 11000) {
+      const field = Object.keys(error.keyPattern || {})[0] || "field";
+      return res.status(400).json({
+        status: false,
+        message: `Duplicate value for ${field}. Please use a unique value.`,
+      });
+    }
     res.status(500).json({ status: false, message: "Internal server error: " + error });
   }
 };
 
 export const editEmployee = async (req, res) => {
-  const { name, email, phone, department, departmentId, salary, position, address, status, employeeId, avatar, joinDate, role, educationLevel, gradeLevel } = req.body;
+  const {
+    name,
+    email,
+    phone,
+    department,
+    departmentId,
+    salary,
+    position,
+    address,
+    status,
+    employeeId,
+    avatar,
+    joinDate,
+    role,
+    educationLevel,
+    gradeLevel,
+    leafUnitId,
+    sectorId,
+    subSectorId,
+    subSubSectorId,
+    scopeLevel,
+    bankName,
+    bankAccountName,
+    bankAccountNumber,
+    bankBranch,
+    workHistory,
+  } = req.body;
   const { id } = req.params;
   try {
-    const prev = await Employee.findById(id).populate('department');
+    const prev = await Employee.findById(id).populate("department");
     if (!prev) {
       return res.status(404).json({ status: false, message: "Employee not found" });
     }
 
-    // Resolve department
-    let newDeptDoc = prev.department; // default keep
-    if (departmentId || department) {
+    if (!canAccessEmployee(req.user, prev)) {
+      return res.status(403).json({ status: false, message: "Access denied" });
+    }
+
+    if (role && role !== prev.role) {
+      const allowed = allowedRolesToCreate(req.user);
+      if (!allowed.includes(role)) {
+        return res.status(403).json({
+          status: false,
+          message: `You cannot assign role '${role}'`,
+        });
+      }
+    }
+
+    let placement = null;
+    if (leafUnitId || sectorId || subSectorId || subSubSectorId) {
+      placement = await resolveOrgPlacement({
+        leafUnitId,
+        sectorId,
+        subSectorId,
+        subSubSectorId,
+        scopeLevel,
+      });
+      if (placement.error) {
+        return res.status(400).json({ status: false, message: placement.error });
+      }
+    }
+
+    const nextRole = role || prev.role;
+    const isOrgRole =
+      nextRole === ROLES.SUPERADMIN ||
+      nextRole === ROLES.ADMIN ||
+      nextRole === ROLES.HR ||
+      scopeLevel === "organization";
+
+    if (nextRole === ROLES.SECTOR_LEAD && isOrgRole) {
+      return res.status(400).json({
+        status: false,
+        message: "Sector Lead cannot be organization-wide",
+      });
+    }
+    if (
+      nextRole === ROLES.SECTOR_LEAD &&
+      placement &&
+      !placement.sectorId
+    ) {
+      return res.status(400).json({
+        status: false,
+        message: "Sector Lead must be assigned to a top-level sector",
+      });
+    }
+
+    if (nextRole === ROLES.MANAGER && placement) {
+      if (!placement.subSectorId) {
+        return res.status(400).json({
+          status: false,
+          message: "Manager must be assigned to a sub-sector",
+        });
+      }
+      if (placement.subSubSectorId) {
+        return res.status(400).json({
+          status: false,
+          message:
+            "Manager is for a sub-sector. Use Unit Manager for a sub-sub-sector",
+        });
+      }
+    }
+
+    if (nextRole === ROLES.UNIT_MANAGER && placement && !placement.subSubSectorId) {
+      return res.status(400).json({
+        status: false,
+        message: "Unit Manager must be assigned to a sub-sub-sector",
+      });
+    }
+
+    if (isOrgRole && !canAssignOrganizationScope(req.user)) {
+      return res.status(403).json({
+        status: false,
+        message: "Only organization-wide Admin/HR or Super Admin can assign org-wide scope",
+      });
+    }
+    if (
+      (placement || isOrgRole) &&
+      !placementWithinActorScope(req.user, {
+        placement: placement || null,
+        isOrgRole,
+      })
+    ) {
+      return res.status(403).json({
+        status: false,
+        message: "You can only assign users within your organizational unit",
+      });
+    }
+
+    // Legacy department support
+    let newDeptDoc = prev.department;
+    if (!placement && !isOrgRole && (departmentId || department)) {
       if (departmentId) newDeptDoc = await Department.findById(departmentId);
       else if (department) newDeptDoc = await Department.findOne({ name: department });
-      if (!newDeptDoc) return res.status(400).json({ status: false, message: 'Invalid department' });
+      if (!newDeptDoc) {
+        return res.status(400).json({ status: false, message: "Invalid organizational unit" });
+      }
     }
 
     const oldDeptId = prev.department?._id?.toString();
@@ -275,56 +691,95 @@ export const editEmployee = async (req, res) => {
         name,
         email,
         phone,
-        department: newDeptDoc?._id || prev.department,
+        department: isOrgRole || placement ? prev.department : newDeptDoc?._id || prev.department,
         salary,
         position,
         address,
         status,
         employeeId,
         profileImage: avatar,
-        startDate: joinDate,
+        ...(joinDate ? { startDate: new Date(joinDate) } : {}),
         gradeLevel,
+        ...(bankName !== undefined ? { bankName } : {}),
+        ...(bankAccountName !== undefined ? { bankAccountName } : {}),
+        ...(bankAccountNumber !== undefined ? { bankAccountNumber } : {}),
+        ...(bankBranch !== undefined ? { bankBranch } : {}),
         ...(educationLevel !== undefined ? { education: [{ degree: educationLevel }] } : {}),
+        ...(workHistory !== undefined
+          ? { workHistory: sanitizeWorkHistory(workHistory) }
+          : {}),
         ...(role ? { role } : {}),
+        ...(isOrgRole
+          ? {
+              scopeLevel: "organization",
+              sectorId: null,
+              subSectorId: null,
+              subSubSectorId: null,
+            }
+          : {}),
+        ...(placement && nextRole === ROLES.SECTOR_LEAD
+          ? {
+              sectorId: placement.sectorId,
+              subSectorId: null,
+              subSubSectorId: null,
+              scopeLevel: "sector",
+            }
+          : {}),
+        ...(placement && nextRole === ROLES.MANAGER
+          ? {
+              sectorId: placement.sectorId,
+              subSectorId: placement.subSectorId,
+              subSubSectorId: null,
+              scopeLevel: "sub_sector",
+            }
+          : {}),
+        ...(placement && nextRole === ROLES.UNIT_MANAGER
+          ? {
+              sectorId: placement.sectorId,
+              subSectorId: placement.subSectorId,
+              subSubSectorId: placement.subSubSectorId,
+              scopeLevel: "sub_sub_sector",
+            }
+          : {}),
+        ...(placement &&
+        nextRole !== ROLES.SECTOR_LEAD &&
+        nextRole !== ROLES.MANAGER &&
+        nextRole !== ROLES.UNIT_MANAGER &&
+        !isOrgRole
+          ? {
+              sectorId: placement.sectorId,
+              subSectorId: placement.subSectorId,
+              subSubSectorId: placement.subSubSectorId,
+              scopeLevel: placement.scopeLevel,
+            }
+          : {}),
       },
       { new: true }
-    ).populate('department');
+    )
+      .populate("department")
+      .populate({ path: "sectorId", select: "name pathNames level" })
+      .populate({ path: "subSectorId", select: "name pathNames level" })
+      .populate({ path: "subSubSectorId", select: "name pathNames level" });
 
     if (!emp) {
       return res.status(404).json({ status: false, message: "Employee not found" });
     }
 
-    // Adjust department counts if changed
     if (oldDeptId && newDeptId && oldDeptId !== newDeptId) {
       await Department.findByIdAndUpdate(oldDeptId, { $inc: { employeeCount: -1 } });
       await Department.findByIdAndUpdate(newDeptId, { $inc: { employeeCount: 1 } });
-      // Recalc both departments' stats when moving
       await recalcDepartmentStats(oldDeptId);
       await recalcDepartmentStats(newDeptId);
     }
-    // If salary changed but department same, still recalc current department
-    if (newDeptId && oldDeptId === newDeptId && (salary !== undefined)) {
+    if (newDeptId && oldDeptId === newDeptId && salary !== undefined) {
       await recalcDepartmentStats(newDeptId);
     }
 
-    // Map to frontend shape
-    const mapped = {
-      id: emp._id,
-      name: emp.name,
-      email: emp.email,
-      phone: emp.phone,
-      department: emp.department?.name || '',
-      departmentId: emp.department?._id || null,
-      position: emp.position,
-      salary: emp.salary,
-      joinDate: emp.startDate ? emp.startDate.toISOString().split('T')[0] : '',
-      status: emp.status,
-      avatar: emp.profileImage || `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.name)}&background=3b82f6&color=fff`,
-      address: emp.address,
-      employeeId: emp.employeeId || '',
-      role: emp.role || 'employee',
-    };
-    res.status(200).json({ status: true, message: "Employee updated successfully", data: mapped });
+    res.status(200).json({
+      status: true,
+      message: "Employee updated successfully",
+      data: mapEmployee(emp),
+    });
   } catch (error) {
     res.status(500).json({ status: false, message: "Internal server error: " + error });
   }
@@ -333,16 +788,26 @@ export const editEmployee = async (req, res) => {
 export const deleteEmployee = async (req, res) => {
   const { id } = req.params;
   try {
-    const emp = await Employee.findById(id).populate('department');
+    const emp = await Employee.findById(id)
+      .populate("department")
+      .populate({ path: "sectorId", select: "name pathNames" })
+      .populate({ path: "subSectorId", select: "name pathNames" })
+      .populate({ path: "subSubSectorId", select: "name pathNames" });
     if (!emp) {
       return res.status(404).json({ status: false, message: "Employee not found" });
     }
+    const unitLabel =
+      emp.subSubSectorId?.pathNames?.join(" › ") ||
+      emp.subSectorId?.pathNames?.join(" › ") ||
+      emp.sectorId?.pathNames?.join(" › ") ||
+      emp.department?.name ||
+      "";
     const emailResult = await sendEmail(
       getRemoveEmployeeMailOptions(
         emp.email,
         emp.name,
         emp.position,
-        emp.department?.name || ''
+        unitLabel
       )
     );
 
