@@ -1,14 +1,20 @@
 import express from "express";
-import { getGoals, getGoalById, createGoal, updateGoal, deleteGoal } from "../controllers/goalController.js";
+import {
+  getGoals,
+  getGoalById,
+  createGoal,
+  updateGoal,
+  deleteGoal,
+} from "../controllers/goalController.js";
 import authorize from "../middlewares/authorize.js";
+import { ALL_STAFF_ROLES } from "../utils/roles.js";
 
 const router = express.Router();
 
-// All goal operations require auth; employees can only access their own, HR can pass employeeId to filter or manage anyone
-router.get("/", authorize(["employee", "hr", "admin"]), getGoals);
-router.get("/:id", authorize(["employee", "hr", "admin"]), getGoalById);
-router.post("/", authorize(["employee", "hr", "admin"]), createGoal);
-router.put("/:id", authorize(["employee", "hr", "admin"]), updateGoal);
-router.delete("/:id", authorize(["employee", "hr", "admin"]), deleteGoal);
+router.get("/", authorize(ALL_STAFF_ROLES), getGoals);
+router.get("/:id", authorize(ALL_STAFF_ROLES), getGoalById);
+router.post("/", authorize(ALL_STAFF_ROLES), createGoal);
+router.put("/:id", authorize(ALL_STAFF_ROLES), updateGoal);
+router.delete("/:id", authorize(ALL_STAFF_ROLES), deleteGoal);
 
 export default router;

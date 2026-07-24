@@ -29,6 +29,8 @@ import {
   Trophy,
   Edit,
 } from "lucide-react";
+import { useClientPagination } from "../hooks/useClientPagination";
+import ListPagination from "../components/ListPagination";
 import {
   Select,
   SelectContent,
@@ -90,6 +92,9 @@ const Goals = () => {
 
   // Active goals (exclude completed)
   const activeGoals = (goals || []).filter(g => (g.status || '').toLowerCase() !== 'completed');
+
+  const goalsPaging = useClientPagination(activeGoals, 10, [goals.length]);
+  const achievementsPaging = useClientPagination(achievements, 10, [goals.length]);
 
   const [newGoal, setNewGoal] = useState({
     title: "",
@@ -426,7 +431,7 @@ const Goals = () => {
           {/* Goals Tab */}
           <TabsContent value="goals" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {activeGoals.map((goal) => {
+              {goalsPaging.pagedItems.map((goal) => {
                 const CategoryIcon = getCategoryIcon(goal.category);
                 return (
                   <Card style={marginStyle} key={goal.id} className="dashboard-card">
@@ -676,12 +681,27 @@ const Goals = () => {
                 );
               })}
             </div>
+            {goalsPaging.showControls && (
+              <ListPagination
+                page={goalsPaging.page}
+                totalPages={goalsPaging.totalPages}
+                hasPrev={goalsPaging.hasPrev}
+                hasNext={goalsPaging.hasNext}
+                rangeLabel={goalsPaging.rangeLabel}
+                onPrev={() => goalsPaging.setPage((p) => Math.max(1, p - 1))}
+                onNext={() =>
+                  goalsPaging.setPage((p) =>
+                    Math.min(goalsPaging.totalPages, p + 1)
+                  )
+                }
+              />
+            )}
           </TabsContent>
 
           {/* Achievements Tab */}
           <TabsContent value="achievements" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-              {achievements.map((achievement) => (
+              {achievementsPaging.pagedItems.map((achievement) => (
                 <Card style={marginStyle} key={achievement.id} className="dashboard-card">
                   <CardContent className="p-6">
                     <div className="flex items-start space-x-4">
@@ -709,6 +729,23 @@ const Goals = () => {
                 </Card>
               ))}
             </div>
+            {achievementsPaging.showControls && (
+              <ListPagination
+                page={achievementsPaging.page}
+                totalPages={achievementsPaging.totalPages}
+                hasPrev={achievementsPaging.hasPrev}
+                hasNext={achievementsPaging.hasNext}
+                rangeLabel={achievementsPaging.rangeLabel}
+                onPrev={() =>
+                  achievementsPaging.setPage((p) => Math.max(1, p - 1))
+                }
+                onNext={() =>
+                  achievementsPaging.setPage((p) =>
+                    Math.min(achievementsPaging.totalPages, p + 1)
+                  )
+                }
+              />
+            )}
           </TabsContent>
         </Tabs>
       </div>
