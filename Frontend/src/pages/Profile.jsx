@@ -36,6 +36,7 @@ import {
   Camera,
 } from "lucide-react";
 import { toast } from "react-toastify";
+import WorkHistoryFields from "../components/org/WorkHistoryFields";
 
 const Profile = () => {
 
@@ -85,7 +86,51 @@ const Profile = () => {
     emergencyContact: user?.emergencyContact || "",
     emergencyPhone: user?.emergencyPhone || "",
     nationalId: user?.nationalId || "",
+    bankName: user?.bankName || "Commercial Bank of Ethiopia",
+    bankAccountName: user?.bankAccountName || user?.name || "",
+    bankAccountNumber: user?.bankAccountNumber || "",
+    workHistory: Array.isArray(user?.workHistory)
+      ? user.workHistory.map((w) => ({
+          company: w.company || "",
+          position: w.position || "",
+          startDate: w.startDate || "",
+          endDate: w.endDate || "",
+          description: w.description || "",
+        }))
+      : [],
   });
+
+  useEffect(() => {
+    if (!user) return;
+    setProfileData((prev) => ({
+      ...prev,
+      name: user.name || "",
+      email: user.email || "",
+      phone: user.phone || "",
+      address: user.address || "",
+      dateOfBirth: user.dateOfBirth || "",
+      department: getDepartmentName(user.department) || user.unitPath || prev.department,
+      position: user.position || "",
+      joinDate: user.joinDate || "",
+      bio: user.bio || "",
+      skills: user.skills || "",
+      emergencyContact: user.emergencyContact || "",
+      emergencyPhone: user.emergencyPhone || "",
+      nationalId: user.nationalId || "",
+      bankName: user.bankName || "Commercial Bank of Ethiopia",
+      bankAccountName: user.bankAccountName || user.name || "",
+      bankAccountNumber: user.bankAccountNumber || "",
+      workHistory: Array.isArray(user.workHistory)
+        ? user.workHistory.map((w) => ({
+            company: w.company || "",
+            position: w.position || "",
+            startDate: w.startDate || "",
+            endDate: w.endDate || "",
+            description: w.description || "",
+          }))
+        : prev.workHistory || [],
+    }));
+  }, [user]);
 
   const [passwordData, setPasswordData] = useState({
     currentPassword: "",
@@ -104,7 +149,15 @@ const Profile = () => {
 
   const handleProfileUpdate = async () => {
     try {
-      await updateProfile(profileData);
+      await updateProfile({
+        ...profileData,
+        bankName: profileData.bankName || "Commercial Bank of Ethiopia",
+        bankAccountName: profileData.bankAccountName || profileData.name || "",
+        bankAccountNumber: String(profileData.bankAccountNumber || "").trim(),
+        workHistory: (profileData.workHistory || []).filter((w) =>
+          String(w.company || "").trim()
+        ),
+      });
       setIsEditing(false);
       toast.success("Profile updated successfully!");
     } catch (error) {
@@ -337,7 +390,7 @@ const Profile = () => {
               <div className="flex-1">
                 <h2 className="text-2xl font-bold">{user?.name}</h2>
                 <p className="text-muted-foreground">
-                  {user?.position} • {deptName || getDepartmentName(user?.department)}
+                  {user?.position} • {user?.unitPath || deptName || getDepartmentName(user?.department) || "—"}
                 </p>
                 <div className="flex items-center space-x-2 mt-2">
                   <Badge variant="secondary">
@@ -361,6 +414,9 @@ const Profile = () => {
           <TabsList className="flex flex-wrap w-full gap-2">
             <TabsTrigger value="personal" className="cursor-pointer">
               Personal Info
+            </TabsTrigger>
+            <TabsTrigger value="work" className="cursor-pointer">
+              Work History
             </TabsTrigger>
             <TabsTrigger value="security" className="cursor-pointer">
               Security
@@ -450,24 +506,89 @@ const Profile = () => {
                       })
                     }
                     disabled={!isEditing}
-                    rows={3}
-                    className={
-                      isEditing ? "resize-none" : "resize-none bg-muted"
-                    }
+                    rows={2}
+                    className={`min-h-[2.5rem] h-16 py-2 ${
+                      isEditing ? "resize-y" : "resize-none bg-muted"
+                    }`}
                   />
+                </div>
+
+                <Separator />
+
+                <div className="space-y-3">
+                  <div>
+                    <CardTitle className="text-base">Bank payment details</CardTitle>
+                    <CardDescription className="mt-1">
+                      Used for salary bank transfer exports (defaults to Commercial Bank of Ethiopia)
+                    </CardDescription>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bankAccountNumber">Bank account</Label>
+                    <Textarea
+                      id="bankAccountNumber"
+                      placeholder="Enter your CBE account number"
+                      value={profileData.bankAccountNumber}
+                      onChange={(e) =>
+                        setProfileData({
+                          ...profileData,
+                          bankAccountNumber: e.target.value,
+                        })
+                      }
+                      disabled={!isEditing}
+                      rows={1}
+                      className={`min-h-0 h-10 py-2 ${
+                        isEditing ? "resize-none" : "resize-none bg-muted"
+                      }`}
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="bankName">Bank</Label>
+                      <Input
+                        id="bankName"
+                        value={profileData.bankName}
+                        onChange={(e) =>
+                          setProfileData({
+                            ...profileData,
+                            bankName: e.target.value,
+                          })
+                        }
+                        disabled={!isEditing}
+                        placeholder="Commercial Bank of Ethiopia"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="bankAccountName">Account name</Label>
+                      <Input
+                        id="bankAccountName"
+                        value={profileData.bankAccountName}
+                        onChange={(e) =>
+                          setProfileData({
+                            ...profileData,
+                            bankAccountName: e.target.value,
+                          })
+                        }
+                        disabled={!isEditing}
+                        placeholder="Name on the account"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 <Separator />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <Label htmlFor="department">Department</Label>
+                    <Label htmlFor="department">Unit / Sector</Label>
                     <Input
                       id="department"
-                      value={profileData.department}
+                      value={user?.unitPath || profileData.department || ""}
                       disabled
                       className="bg-muted"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Sector / sub-sector / unit assignment (managed by HR)
+                    </p>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="position">Position</Label>
@@ -583,6 +704,47 @@ const Profile = () => {
                       variant="outline"
                       onClick={() => setIsEditing(false)}
                     > 
+                      Cancel
+                    </Button>
+                    <Button
+                      style={buttonStyle}
+                      onClick={handleProfileUpdate}
+                      className="btn-gradient"
+                    >
+                      <Save className="w-4 h-4 mr-2" />
+                      Save Changes
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Previous work history */}
+          <TabsContent value="work" className="space-y-6">
+            <Card className="dashboard-card">
+              <CardHeader>
+                <CardTitle>Previous Work History</CardTitle>
+                <CardDescription>
+                  Employers you worked at before joining GammoDA
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <WorkHistoryFields
+                  idPrefix="profile-work"
+                  value={profileData.workHistory || []}
+                  onChange={(workHistory) =>
+                    setProfileData({ ...profileData, workHistory })
+                  }
+                  readOnly={!isEditing}
+                />
+                {isEditing && (
+                  <div className="flex justify-end space-x-4">
+                    <Button
+                      style={buttonStyle}
+                      variant="outline"
+                      onClick={() => setIsEditing(false)}
+                    >
                       Cancel
                     </Button>
                     <Button
