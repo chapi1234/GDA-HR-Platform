@@ -22,13 +22,13 @@ import {
 import { Badge } from "../ui/badge";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "../ui/input-otp";
 import {
-  Building2,
   Mail,
   Lock,
   User,
-  Shield,
   ArrowLeft,
   CheckCircle,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import logo from "../../assets/download.jpg";
 import { toast } from "react-toastify";
@@ -40,11 +40,21 @@ export const AuthForm = () => {
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState("login"); // 'login', 'signup', 'forgot-email', 'forgot-code', 'forgot-password'
   const [otpCode, setOtpCode] = useState("");
+  const [showPassword, setShowPassword] = useState({
+    login: false,
+    signup: false,
+    signupConfirm: false,
+    forgot: false,
+    forgotConfirm: false,
+  });
+
+  const togglePassword = (field) => {
+    setShowPassword((prev) => ({ ...prev, [field]: !prev[field] }));
+  };
 
   const [loginForm, setLoginForm] = useState({
     email: "",
     password: "",
-    role: "employee",
   });
 
   const [signupForm, setSignupForm] = useState({
@@ -54,6 +64,9 @@ export const AuthForm = () => {
     confirmPassword: "",
     role: "employee",
     department: "",
+    sectorId: "",
+    subSectorId: "",
+    subSubSectorId: "",
     avatar: "",
   });
 
@@ -63,36 +76,41 @@ export const AuthForm = () => {
     confirmPassword: "",
   });
 
-  const [departments, setDepartments] = useState([]); // [{id,name}]
-  const [loadingDepartments, setLoadingDepartments] = useState(false);
+  const [sectors, setSectors] = useState([]); // flat sector nodes
+  const [loadingSectors, setLoadingSectors] = useState(false);
   const API_BASE = API_URL;
 
-  const fetchDepartments = async () => {
-    setLoadingDepartments(true);
+  const fetchSectors = async () => {
+    setLoadingSectors(true);
     try {
-  const res = await axios.get(`${API_BASE}/api/departments/public-list`);
-  const list = (res.data?.data || []).filter(d => !!d?.name && !!d?._id || !!d?.id);
-  // normalize id
-  const normalized = list.map(d => ({ id: d.id || d._id, name: d.name }));
-  setDepartments(normalized);
+      const sectorRes = await axios.get(`${API_BASE}/api/sectors/public-list`);
+      setSectors(Array.isArray(sectorRes.data?.data) ? sectorRes.data.data : []);
     } catch (err) {
       console.error(err);
-      // non-blocking: fallback to empty list
+      setSectors([]);
     } finally {
-      setLoadingDepartments(false);
+      setLoadingSectors(false);
     }
   };
 
   useEffect(() => {
-    fetchDepartments();
+    fetchSectors();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const rootSectors = sectors.filter((s) => s.level === "sector");
+  const subSectors = sectors.filter(
+    (s) => s.level === "sub_sector" && String(s.parent) === String(signupForm.sectorId)
+  );
+  const subSubSectors = sectors.filter(
+    (s) => s.level === "sub_sub_sector" && String(s.parent) === String(signupForm.subSectorId)
+  );
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await login(loginForm.email, loginForm.password, loginForm.role);
+      await login(loginForm.email, loginForm.password);
       navigate("/dashboard");
     } catch (error) {
       console.error("Login error:", error);
@@ -110,11 +128,20 @@ export const AuthForm = () => {
 
     setLoading(true);
     try {
+      const leafUnitId =
+        signupForm.subSubSectorId ||
+        signupForm.subSectorId ||
+        signupForm.sectorId ||
+        undefined;
       const payload = {
         name: signupForm.name,
         email: signupForm.email,
-        role: signupForm.role,
-        departmentId: signupForm.department,
+        role: "employee",
+        leafUnitId,
+        sectorId: signupForm.sectorId || undefined,
+        subSectorId: signupForm.subSectorId || undefined,
+        subSubSectorId: signupForm.subSubSectorId || undefined,
+        departmentId: leafUnitId ? undefined : signupForm.department || undefined,
         avatar: signupForm.avatar || "",
         password: signupForm.password,
         confirmPassword: signupForm.confirmPassword,
@@ -192,24 +219,23 @@ export const AuthForm = () => {
 
 
   return (
-    <div className="min-h-screen bg-gradient-hero flex items-center justify-center p-4">
-      <div className="mx-auto transition-all duration-300"  style={{ width: "var(--auth-form-width)" }} > 
-        {" "}
-        {/* Responsive: half screen on sm+, centered */}
+    <div className="auth-shell min-h-screen flex items-center justify-center p-4">
+      <div className="mx-auto transition-all duration-300" style={{ width: "var(--auth-form-width)" }}>
         {/* Logo and Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-full shadow-lg mb-4 overflow-hidden">
-            {/* <Building2 className="w-8 h-8 text-primary" /> */}
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-card rounded-full shadow-md border border-border mb-4 overflow-hidden">
             <img
               src={logo}
               alt="GammoDA Logo"
               className="w-16 h-16 object-cover"
             />
           </div>
-          <h1 className="text-2xl font-bold text-black dark:text-white mb-2">Gamo Development Association</h1>
-          <p className="text-blue-100">Human Resource Management System</p>
+          <h1 className="text-2xl font-bold text-foreground mb-2">
+            Gamo Development Association
+          </h1>
+          <p className="text-muted-foreground">Human Resource Management System</p>
         </div>
-        <Card className="shadow-2xl border-0" style={{ marginTop: 15 }}>
+        <Card className="shadow-xl border border-border bg-card" style={{ marginTop: 15 }}>
           <CardHeader className="text-center pb-4">
             {mode === "login" && (
               <>
@@ -251,35 +277,6 @@ export const AuthForm = () => {
             {/* Login Form */}
             {mode === "login" && (
               <form onSubmit={handleLogin} className="space-y-4">
-                {/* Role Selection */}
-                <div className="space-y-2">
-                  <Label htmlFor="role">Role</Label>
-                  <Select
-                    value={loginForm.role}
-                    onValueChange={(value) =>
-                      setLoginForm((prev) => ({ ...prev, role: value }))
-                    }
-                  >
-                    <SelectTrigger className="h-10">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="employee">
-                        <div className="flex items-center space-x-2">
-                          <User className="w-4 h-4" />
-                          <span>Employee</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="hr">
-                        <div className="flex items-center space-x-2">
-                          <Shield className="w-4 h-4" />
-                          <span>HR Manager</span>
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
                 {/* Email */}
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
@@ -309,9 +306,9 @@ export const AuthForm = () => {
                     <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                     <Input
                       id="password"
-                      type="password"
+                      type={showPassword.login ? "text" : "password"}
                       placeholder="Enter your password"
-                      className="pl-10"
+                      className="pl-10 pr-10"
                       value={loginForm.password}
                       onChange={(e) =>
                         setLoginForm((prev) => ({
@@ -321,6 +318,18 @@ export const AuthForm = () => {
                       }
                       required
                     />
+                    <button
+                      type="button"
+                      onClick={() => togglePassword("login")}
+                      className="absolute right-3 top-2.5 p-0.5 text-muted-foreground hover:text-foreground"
+                      aria-label={showPassword.login ? "Hide password" : "Show password"}
+                    >
+                      {showPassword.login ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
+                    </button>
                   </div>
                 </div>
 
@@ -400,49 +409,93 @@ export const AuthForm = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-role">Role</Label>
-                    <Select
-                      value={signupForm.role}
-                      onValueChange={(value) =>
-                        setSignupForm((prev) => ({ ...prev, role: value }))
-                      }
-                    >
-                      <SelectTrigger className="h-10">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="employee">Employee</SelectItem>
-                        <SelectItem value="hr">HR Manager</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="space-y-2">
+                  <Label>Sector</Label>
+                  <Select
+                    value={signupForm.sectorId}
+                    onValueChange={(value) =>
+                      setSignupForm((prev) => ({
+                        ...prev,
+                        sectorId: value,
+                        subSectorId: "",
+                        subSubSectorId: "",
+                        department: "",
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="h-10">
+                      <SelectValue
+                        placeholder={
+                          loadingSectors
+                            ? "Loading..."
+                            : rootSectors.length
+                              ? "Select sector..."
+                              : "No sectors (run seed)"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {rootSectors.map((s) => (
+                        <SelectItem key={s._id} value={s._id}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
+                {signupForm.sectorId && (
                   <div className="space-y-2">
-                    <Label htmlFor="department">Department</Label>
+                    <Label>Sub-sector</Label>
                     <Select
-                      value={signupForm.department}
+                      value={signupForm.subSectorId}
                       onValueChange={(value) =>
                         setSignupForm((prev) => ({
                           ...prev,
-                          department: value,
+                          subSectorId: value,
+                          subSubSectorId: "",
                         }))
                       }
                     >
                       <SelectTrigger className="h-10">
-                        <SelectValue placeholder={loadingDepartments ? "Loading..." : (departments.length ? "Select..." : "No departments") } />
+                        <SelectValue placeholder={subSectors.length ? "Select sub-sector..." : "No sub-sectors yet"} />
                       </SelectTrigger>
                       <SelectContent>
-                        {departments.map((dept) => (
-                          <SelectItem key={dept.id} value={dept.id}>
-                            {dept.name}
+                        {subSectors.map((s) => (
+                          <SelectItem key={s._id} value={s._id}>
+                            {s.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
-                </div>
+                )}
+
+                {subSubSectors.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Unit (sub-sub-sector)</Label>
+                    <Select
+                      value={signupForm.subSubSectorId}
+                      onValueChange={(value) =>
+                        setSignupForm((prev) => ({
+                          ...prev,
+                          subSubSectorId: value,
+                        }))
+                      }
+                    >
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder="Select unit..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {subSubSectors.map((s) => (
+                          <SelectItem key={s._id} value={s._id}>
+                            {s.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="signup-password">Password</Label>
@@ -450,9 +503,9 @@ export const AuthForm = () => {
                     <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                     <Input
                       id="signup-password"
-                      type="password"
+                      type={showPassword.signup ? "text" : "password"}
                       placeholder="Create a password"
-                      className="pl-10"
+                      className="pl-10 pr-10"
                       value={signupForm.password}
                       onChange={(e) =>
                         setSignupForm((prev) => ({
@@ -462,6 +515,18 @@ export const AuthForm = () => {
                       }
                       required
                     />
+                    <button
+                      type="button"
+                      onClick={() => togglePassword("signup")}
+                      className="absolute right-3 top-2.5 p-0.5 text-muted-foreground hover:text-foreground"
+                      aria-label={showPassword.signup ? "Hide password" : "Show password"}
+                    >
+                      {showPassword.signup ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
+                    </button>
                   </div>
                 </div>
 
@@ -471,9 +536,9 @@ export const AuthForm = () => {
                     <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                     <Input
                       id="confirmPassword"
-                      type="password"
+                      type={showPassword.signupConfirm ? "text" : "password"}
                       placeholder="Confirm your password"
-                      className="pl-10"
+                      className="pl-10 pr-10"
                       value={signupForm.confirmPassword}
                       onChange={(e) =>
                         setSignupForm((prev) => ({
@@ -483,6 +548,20 @@ export const AuthForm = () => {
                       }
                       required
                     />
+                    <button
+                      type="button"
+                      onClick={() => togglePassword("signupConfirm")}
+                      className="absolute right-3 top-2.5 p-0.5 text-muted-foreground hover:text-foreground"
+                      aria-label={
+                        showPassword.signupConfirm ? "Hide password" : "Show password"
+                      }
+                    >
+                      {showPassword.signupConfirm ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
+                    </button>
                   </div>
                 </div>
 
@@ -603,9 +682,9 @@ export const AuthForm = () => {
                     <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                     <Input
                       id="new-password"
-                      type="password"
+                      type={showPassword.forgot ? "text" : "password"}
                       placeholder="Enter new password"
-                      className="pl-10"
+                      className="pl-10 pr-10"
                       value={forgotForm.newPassword}
                       onChange={(e) =>
                         setForgotForm((prev) => ({
@@ -615,6 +694,18 @@ export const AuthForm = () => {
                       }
                       required
                     />
+                    <button
+                      type="button"
+                      onClick={() => togglePassword("forgot")}
+                      className="absolute right-3 top-2.5 p-0.5 text-muted-foreground hover:text-foreground"
+                      aria-label={showPassword.forgot ? "Hide password" : "Show password"}
+                    >
+                      {showPassword.forgot ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
+                    </button>
                   </div>
                 </div>
 
@@ -626,9 +717,9 @@ export const AuthForm = () => {
                     <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                     <Input
                       id="confirm-new-password"
-                      type="password"
+                      type={showPassword.forgotConfirm ? "text" : "password"}
                       placeholder="Confirm new password"
-                      className="pl-10"
+                      className="pl-10 pr-10"
                       value={forgotForm.confirmPassword}
                       onChange={(e) =>
                         setForgotForm((prev) => ({
@@ -638,6 +729,20 @@ export const AuthForm = () => {
                       }
                       required
                     />
+                    <button
+                      type="button"
+                      onClick={() => togglePassword("forgotConfirm")}
+                      className="absolute right-3 top-2.5 p-0.5 text-muted-foreground hover:text-foreground"
+                      aria-label={
+                        showPassword.forgotConfirm ? "Hide password" : "Show password"
+                      }
+                    >
+                      {showPassword.forgotConfirm ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
+                    </button>
                   </div>
                 </div>
 

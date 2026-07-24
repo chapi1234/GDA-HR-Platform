@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import { toast } from "react-toastify";
 import axios from "axios";
+import { buildCapabilities } from "../utils/permissions";
 const API_URL = import.meta.env.VITE_API_URL;
 
 const AuthContext = createContext();
@@ -39,14 +40,36 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  const login = async (email, password, role) => {
+  // Clear stale sessions when API rejects expired/invalid JWT
+  useEffect(() => {
+    const id = axios.interceptors.response.use(
+      (res) => res,
+      (error) => {
+        const status = error?.response?.status;
+        const msg = String(error?.response?.data?.message || "");
+        if (
+          status === 401 &&
+          (msg.toLowerCase().includes("expired") ||
+            msg.toLowerCase().includes("invalid") ||
+            msg.toLowerCase().includes("token"))
+        ) {
+          localStorage.removeItem("authToken");
+          localStorage.removeItem("userData");
+          setUser(null);
+        }
+        return Promise.reject(error);
+      }
+    );
+    return () => axios.interceptors.response.eject(id);
+  }, []);
+
+  const login = async (email, password) => {
     try {
       const response = await axios.post(
         `${API_URL}/api/auth/login`,
         {
           email,
           password,
-          role,
         }
       );
       const data = response.data;
@@ -123,8 +146,19 @@ export const AuthProvider = ({ children }) => {
 
       if (!response.data?.status) throw new Error(response.data?.message || "Update failed");
 
-      // Merge the saved data back into local user state
-      const updatedUser = { ...user, ...updatedData };
+      const saved = response.data?.data || {};
+      const updatedUser = {
+        ...user,
+        ...updatedData,
+        ...saved,
+        id: saved.id || user.id || user._id,
+        bankAccountNumber:
+          saved.bankAccountNumber ?? updatedData.bankAccountNumber ?? user.bankAccountNumber,
+        bankName: saved.bankName ?? updatedData.bankName ?? user.bankName,
+        bankAccountName:
+          saved.bankAccountName ?? updatedData.bankAccountName ?? user.bankAccountName,
+        workHistory: saved.workHistory ?? updatedData.workHistory ?? user.workHistory ?? [],
+      };
       setUser(updatedUser);
       localStorage.setItem("userData", JSON.stringify(updatedUser));
       toast.success("Profile updated successfully");
@@ -192,6 +226,8 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const caps = buildCapabilities(user);
+
   const value = {
     user,
     login,
@@ -202,8 +238,7 @@ export const AuthProvider = ({ children }) => {
     uploadProfileImage,
     loading,
     isAuthenticated: !!user,
-    isHR: user?.role === "hr",
-    isEmployee: user?.role === "employee",
+    ...caps,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
