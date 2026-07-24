@@ -4,12 +4,29 @@ const EmployeeSchema = new mongoose.Schema(
   {
     // Auth & Account
     email: { type: String, required: true, unique: true },
-    password: { type: String, required: true },
+    password: { type: String, required: true, select: false },
     role: {
       type: String,
-      enum: ["employee", "hr"],
+      enum: [
+        "superadmin",
+        "admin",
+        "hr",
+        "sector_lead",
+        "manager",
+        "unit_manager",
+        "employee",
+      ],
       default: "employee",
     },
+    scopeLevel: {
+      type: String,
+      enum: ["organization", "sector", "sub_sector", "sub_sub_sector"],
+      default: "sub_sector",
+    },
+    // Organizational placement (new hierarchy)
+    sectorId: { type: mongoose.Schema.Types.ObjectId, ref: "Sector", default: null },
+    subSectorId: { type: mongoose.Schema.Types.ObjectId, ref: "Sector", default: null },
+    subSubSectorId: { type: mongoose.Schema.Types.ObjectId, ref: "Sector", default: null },
     lastLogin: {
       type: Date,
       default: Date.now,
@@ -24,9 +41,11 @@ const EmployeeSchema = new mongoose.Schema(
     address: { type: String },
     bio: { type: String },
     skills: { type: String },
-  // Employment Info
-  position: { type: String },
-  department: { type: mongoose.Schema.Types.ObjectId, ref: "Department" },
+
+    // Employment Info
+    position: { type: String },
+    // Legacy department support (kept for backward compatibility during migration)
+    department: { type: mongoose.Schema.Types.ObjectId, ref: "Department" },
     employeeId: { type: String },
     manager: { type: mongoose.Schema.Types.ObjectId, ref: "Employee" },
     startDate: Date,
@@ -42,24 +61,38 @@ const EmployeeSchema = new mongoose.Schema(
       enum: ["hourly", "salary"],
       default: "salary",
     },
+    // Bank details for payment export (GaDA default: CBE)
+    bankName: { type: String, default: "Commercial Bank of Ethiopia" },
+    bankAccountName: { type: String, default: "" },
+    bankAccountNumber: { type: String, default: "" },
+    bankBranch: { type: String, default: "" },
     gradeLevel: { type: String },
     nationalId: { type: String },
     emergencyContact: { type: String },
     emergencyPhone: { type: String },
-    resume: { 
+    resume: {
       name: String,
       type: String,
       url: String,
       uploadDate: { type: Date, default: Date.now },
-     },
+    },
 
-    // Education & Certifications
     education: [
       {
         institution: String,
         degree: String,
         fieldOfStudy: String,
         graduationYear: Number,
+      },
+    ],
+    /** Previous employers before joining GammoDA */
+    workHistory: [
+      {
+        company: { type: String, required: true },
+        position: { type: String },
+        startDate: { type: String }, // YYYY-MM or YYYY-MM-DD
+        endDate: { type: String }, // empty / null = still there or unknown
+        description: { type: String },
       },
     ],
     certifications: [
@@ -70,8 +103,6 @@ const EmployeeSchema = new mongoose.Schema(
         expirationDate: Date,
       },
     ],
-
-    // Documents
     documents: [
       {
         name: String,
@@ -80,20 +111,24 @@ const EmployeeSchema = new mongoose.Schema(
         uploadDate: { type: Date, default: Date.now },
       },
     ],
-
-    // Custom Fields
     customFields: [
       {
         fieldName: String,
         fieldValue: String,
       },
     ],
-    otp: String,
-    otpExpiry: Date,
+    otp: { type: String, select: false },
+    otpExpiry: { type: Date, select: false },
+    /** Conversations the user chose to leave (won't be auto-rejoined) */
+    chatOptOut: [
+      { type: mongoose.Schema.Types.ObjectId, ref: "Conversation" },
+    ],
   },
   {
     timestamps: true,
   }
 );
+
+EmployeeSchema.index({ sectorId: 1, subSectorId: 1, role: 1 });
 
 export default mongoose.model("Employee", EmployeeSchema);
