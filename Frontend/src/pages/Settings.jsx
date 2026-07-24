@@ -15,6 +15,7 @@ import {
   Monitor, Sun, Moon, Smartphone, Save, Download, Upload 
 } from 'lucide-react';
 import { toast } from 'react-toastify';
+import * as XLSX from 'xlsx';
 
 const Settings = () => {
 
@@ -81,26 +82,41 @@ const Settings = () => {
   };
 
   const handleExportData = () => {
-    const dataToExport = {
-      profile: user,
-      settings: settings,
-      exportDate: new Date().toISOString()
-    };
-    
-    const blob = new Blob([JSON.stringify(dataToExport, null, 2)], {
-      type: 'application/json'
-    });
-    
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `gammoda-data-${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    toast.success('Data exported successfully!');
+    const book = XLSX.utils.book_new();
+    const exportedAt = new Date().toISOString();
+
+    const profileRows = [
+      ['Field', 'Value'],
+      ['Name', user?.name || ''],
+      ['Email', user?.email || ''],
+      ['Phone', user?.phone || ''],
+      ['Role', user?.role || ''],
+      ['Unit / Sector', user?.unitPath || ''],
+      ['Position', user?.position || ''],
+      ['Bank', user?.bankName || 'Commercial Bank of Ethiopia'],
+      ['Account name', user?.bankAccountName || ''],
+      ['Account number', user?.bankAccountNumber || ''],
+      ['Export date', exportedAt],
+    ];
+    const profileSheet = XLSX.utils.aoa_to_sheet(profileRows);
+    profileSheet['!cols'] = [{ wch: 18 }, { wch: 40 }];
+    XLSX.utils.book_append_sheet(book, profileSheet, 'Profile');
+
+    const settingsRows = [
+      ['Setting', 'Value'],
+      ...Object.entries(settings || {}).map(([key, value]) => [
+        key,
+        typeof value === 'object' ? JSON.stringify(value) : String(value ?? ''),
+      ]),
+      ['exportDate', exportedAt],
+    ];
+    const settingsSheet = XLSX.utils.aoa_to_sheet(settingsRows);
+    settingsSheet['!cols'] = [{ wch: 24 }, { wch: 40 }];
+    XLSX.utils.book_append_sheet(book, settingsSheet, 'Settings');
+
+    const day = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(book, `GaDA-Settings-Export-${day}.xlsx`);
+    toast.success('Data exported to Excel');
   };
 
   return (
@@ -315,7 +331,7 @@ const Settings = () => {
                       <SelectContent>
                         <SelectItem value="public">Everyone</SelectItem>
                         <SelectItem value="team">Team Members Only</SelectItem>
-                        <SelectItem value="department">Department Only</SelectItem>
+                        <SelectItem value="department">Unit Only</SelectItem>
                         <SelectItem value="private">Private</SelectItem>
                       </SelectContent>
                     </Select>
@@ -464,7 +480,7 @@ const Settings = () => {
                     <div className="flex space-x-2">
                       <Button variant="outline" onClick={handleExportData}>
                         <Download className="w-4 h-4 mr-2" />
-                        Export Data
+                        Export Excel
                       </Button>
                       <Button variant="outline">
                         <Upload className="w-4 h-4 mr-2" />

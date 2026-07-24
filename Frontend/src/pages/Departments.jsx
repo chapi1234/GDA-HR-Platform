@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -15,6 +16,8 @@ import {
   TrendingUp, Search, MoreHorizontal
 } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { useClientPagination } from '../hooks/useClientPagination';
+import ListPagination from '../components/ListPagination';
 const API_URL = import.meta.env.VITE_API_URL;
 
 const Departments = () => {
@@ -36,6 +39,7 @@ const Departments = () => {
   };
 
   const { isHR } = useAuth();
+  // Legacy page — prefer /sectors going forward
   const [employees, setEmployees] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -90,7 +94,7 @@ const Departments = () => {
       setDepartments(apiDepts.map(enrichDepartment));
     } catch (err) {
       console.error(err);
-      toast.error(err.response?.data?.message || 'Failed to load departments');
+      toast.error(err.response?.data?.message || 'Failed to load units');
     }
   };
 
@@ -122,6 +126,11 @@ const Departments = () => {
     (dept.head || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const deptPaging = useClientPagination(filteredDepartments, 10, [
+    searchTerm,
+    departments.length,
+  ]);
+
   const handleAddDepartment = async () => {
     if (!newDepartment.name || !newDepartment.description) {
       toast.error('Please fill in all required fields');
@@ -142,10 +151,10 @@ const Departments = () => {
   setDepartments(prev => [...prev, enrichDepartment(created)]);
       setNewDepartment({ name: '', description: '', head: '', location: '', budget: '' });
       setShowAddDialog(false);
-      toast.success('Department added successfully!');
+      toast.success('Unit added successfully!');
     } catch (err) {
       console.error(err);
-      toast.error(err.response?.data?.message || 'Failed to add department');
+      toast.error(err.response?.data?.message || 'Failed to add unit');
     }
   };
 
@@ -167,24 +176,24 @@ const Departments = () => {
       if (!updated) throw new Error('No department returned');
   setDepartments(prev => prev.map(d => d.id === updated.id ? enrichDepartment(updated) : d));
       setEditingDepartment(null);
-      toast.success('Department updated successfully!');
+      toast.success('Unit updated successfully!');
     } catch (err) {
       console.error(err);
-      toast.error(err.response?.data?.message || 'Failed to update department');
+      toast.error(err.response?.data?.message || 'Failed to update unit');
     }
   };
 
   const handleDeleteDepartment = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this department?')) return;
+    if (!window.confirm('Are you sure you want to delete this unit?')) return;
     try {
       await axios.delete(`${API_BASE}/api/departments/${id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setDepartments(prev => prev.filter(dept => dept.id !== id));
-      toast.success('Department deleted successfully!');
+      toast.success('Unit deleted successfully!');
     } catch (err) {
       console.error(err);
-      toast.error(err.response?.data?.message || 'Failed to delete department');
+      toast.error(err.response?.data?.message || 'Failed to delete unit');
     }
   };
 
@@ -197,7 +206,7 @@ const Departments = () => {
         <div className="text-center py-12">
           <Building2 className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
           <h2 className="text-2xl font-bold mb-2">Access Restricted</h2>
-          <p className="text-muted-foreground">Only HR managers can access department management.</p>
+          <p className="text-muted-foreground">Only HR managers can access this legacy page.</p>
         </div>
       </div>
     );
@@ -205,17 +214,26 @@ const Departments = () => {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
+      <div className="rounded-lg border border-amber-300 bg-amber-50 text-amber-950 px-4 py-3 text-sm">
+        <strong>Legacy page.</strong> Org structure is now managed under{" "}
+        <Link to="/sectors" className="underline font-medium text-amber-900">
+          Sectors
+        </Link>
+        . Prefer that for Business / Charity units and assignments.
+      </div>
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Department Management</h1>
-          <p className="text-muted-foreground">Organize and manage company departments</p>
+          <h1 className="text-3xl font-bold text-foreground">Legacy Units</h1>
+          <p className="text-muted-foreground">
+            Prefer Sectors for Business / Charity structure. This page is kept for old data only.
+          </p>
         </div>
         <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
           <DialogTrigger asChild style={{ ...marginStyle, ...button }}>
             <Button className="btn-gradient">
               <Plus className="w-4 h-4 mr-2" />
-              Add Department
+              Add Legacy Unit
             </Button>
           </DialogTrigger>
 
@@ -223,17 +241,19 @@ const Departments = () => {
 
           <DialogContent style={{ maxHeight: '90vh', overflowY: 'auto' }}>
             <DialogHeader>
-              <DialogTitle>Add New Department</DialogTitle>
-              <DialogDescription>Create a new department in your organization.</DialogDescription>
+              <DialogTitle>Add Legacy Unit</DialogTitle>
+              <DialogDescription>
+                Prefer creating units under Sectors. This form is for legacy entries only.
+              </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Department Name *</Label>
+                <Label htmlFor="name">Unit Name *</Label>
                 <Input
                   id="name"
                   value={newDepartment.name}
                   onChange={(e) => setNewDepartment({ ...newDepartment, name: e.target.value })}
-                  placeholder="e.g., Engineering, Marketing"
+                  placeholder="e.g., Tourism Development"
                 />
               </div>
               <div className="space-y-2">
@@ -242,16 +262,16 @@ const Departments = () => {
                   id="description"
                   value={newDepartment.description}
                   onChange={(e) => setNewDepartment({ ...newDepartment, description: e.target.value })}
-                  placeholder="Brief description of the department"
+                  placeholder="Brief description of the unit"
                   rows={3}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="head">Department Head</Label>
+                <Label htmlFor="head">Unit Lead</Label>
                 <Select value={newDepartment.head} onValueChange={(value) => setNewDepartment({ ...newDepartment, head: value })}>
                   <SelectTrigger>
                     <SelectValue>
-                      {employees.find(e => e.id === newDepartment.head)?.name || 'Select department head'}
+                      {employees.find(e => e.id === newDepartment.head)?.name || 'Select unit lead'}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
@@ -286,7 +306,7 @@ const Departments = () => {
                 Cancel
               </Button>
               <Button onClick={handleAddDepartment} className="btn-gradient">
-                Add Department
+                Add Legacy Unit
               </Button>
             </div>
           </DialogContent>
@@ -303,7 +323,7 @@ const Departments = () => {
                   <Building2 className="w-4 h-4 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Departments</p>
+                  <p className="text-sm text-muted-foreground">Legacy Units</p>
                   <p className="text-xl font-bold">{departments.length}</p>
                 </div>
               </div>
@@ -363,7 +383,7 @@ const Departments = () => {
           <div className="relative">
             <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="Search departments..."
+              placeholder="Search units..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
@@ -373,8 +393,9 @@ const Departments = () => {
       </Card>
 
       {/* Departments Grid */}
+      <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredDepartments.map((department) => (
+        {deptPaging.pagedItems.map((department) => (
           <Card style={marginStyle} key={department.id} className="dashboard-card hover:shadow-card-hover transition-all duration-200">
             <CardHeader className="pb-4">
               <div className="flex items-start justify-between">
@@ -405,7 +426,7 @@ const Departments = () => {
                 </Avatar>
                 <div>
                   <p className="text-sm font-medium">{department.head}</p>
-                  <p className="text-xs text-muted-foreground">Department Head</p>
+                  <p className="text-xs text-muted-foreground">Unit Lead</p>
                 </div>
               </div>
 
@@ -457,12 +478,26 @@ const Departments = () => {
           </Card>
         ))}
       </div>
+      {deptPaging.showControls && (
+        <ListPagination
+          page={deptPaging.page}
+          totalPages={deptPaging.totalPages}
+          hasPrev={deptPaging.hasPrev}
+          hasNext={deptPaging.hasNext}
+          rangeLabel={deptPaging.rangeLabel}
+          onPrev={() => deptPaging.setPage((p) => Math.max(1, p - 1))}
+          onNext={() =>
+            deptPaging.setPage((p) => Math.min(deptPaging.totalPages, p + 1))
+          }
+        />
+      )}
+      </div>
 
       {filteredDepartments.length === 0 && (
         <div className="text-center py-12">
           <Building2 className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-semibold mb-2">No departments found</h3>
-          <p className="text-muted-foreground">Try adjusting your search or add a new department</p>
+          <h3 className="text-lg font-semibold mb-2">No units found</h3>
+          <p className="text-muted-foreground">Try adjusting your search or add a new unit under Sectors</p>
         </div>
       )}
 
@@ -470,13 +505,13 @@ const Departments = () => {
       <Dialog open={!!editingDepartment} onOpenChange={(open) => !open && setEditingDepartment(null)}>
         <DialogContent style={{ maxHeight: '90vh', overflowY: 'auto' }}>
           <DialogHeader>
-            <DialogTitle>Edit Department</DialogTitle>
-            <DialogDescription>Update department information.</DialogDescription>
+            <DialogTitle>Edit Legacy Unit</DialogTitle>
+            <DialogDescription>Update this legacy unit entry. Prefer Sectors for new structure.</DialogDescription>
           </DialogHeader>
           {editingDepartment && (
             <div className="grid gap-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="edit-name">Department Name *</Label>
+                <Label htmlFor="edit-name">Unit Name *</Label>
                 <Input
                   id="edit-name"
                   value={editingDepartment.name}
@@ -493,11 +528,11 @@ const Departments = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit-head">Department Head</Label>
+                <Label htmlFor="edit-head">Unit Lead</Label>
                 <Select value={editingDepartment.head} onValueChange={(value) => setEditingDepartment({ ...editingDepartment, head: value })}>
                   <SelectTrigger>
                     <SelectValue>
-                      {employees.find(e => e.id === editingDepartment.head)?.name || 'Select department head'}
+                      {employees.find(e => e.id === editingDepartment.head)?.name || 'Select unit lead'}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
@@ -531,7 +566,7 @@ const Departments = () => {
               Cancel
             </Button>
             <Button onClick={handleUpdateDepartment} className="btn-gradient">
-              Update Department
+              Update Unit
             </Button>
           </div>
         </DialogContent>
