@@ -1,39 +1,48 @@
 import { Card, CardContent } from '../ui/card';
 
-export const StatCard = ({ 
-  title, 
-  value, 
-  change, 
-  icon: Icon, 
+export const StatCard = ({
+  title,
+  value,
+  change,
+  icon: Icon,
   trend = 'up',
-  className = '' 
+  className = '',
+  showVsLastMonth = true,
+  style,
 }) => {
-  const trendColor = trend === 'up' 
-    ? 'text-success' 
-    : trend === 'down' 
-    ? 'text-destructive' 
-    : 'text-muted-foreground';
+  const trendColor =
+    trend === 'up'
+      ? 'text-success'
+      : trend === 'down'
+        ? 'text-destructive'
+        : 'text-muted-foreground';
 
   return (
-    <Card className={`dashboard-card ${className}`}>
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between">
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+    <Card className={`dashboard-card h-full ${className}`} style={style}>
+      <CardContent className="p-6 h-full">
+        <div className="flex h-full min-h-[8.5rem] items-start justify-between gap-3">
+          <div className="min-w-0 flex-1 space-y-2">
+            <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground line-clamp-2">
               {title}
             </p>
-            <p className="text-3xl font-bold text-foreground">
+            <p className="text-2xl font-bold leading-tight text-foreground break-words sm:text-3xl">
               {value}
             </p>
-            {change && (
-              <p className={`text-sm font-medium ${trendColor} flex items-center space-x-1`}>
-                <span>{change}</span>
-                <span className="text-xs text-muted-foreground">vs last month</span>
-              </p>
-            )}
+            <div className="min-h-[1.25rem]">
+              {change ? (
+                <p className={`flex flex-wrap items-center gap-x-1 text-sm font-medium ${trendColor}`}>
+                  <span>{change}</span>
+                  {showVsLastMonth && (
+                    <span className="text-xs font-normal text-muted-foreground">
+                      vs last month
+                    </span>
+                  )}
+                </p>
+              ) : null}
+            </div>
           </div>
-          <div className="flex items-center justify-center w-12 h-12 bg-primary/10 rounded-xl">
-            <Icon className="w-6 h-6 text-primary" />
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+            <Icon className="h-6 w-6 text-primary" />
           </div>
         </div>
       </CardContent>

@@ -1,7 +1,9 @@
 import { useAuth } from '../contexts/AuthContext';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { StatCard } from '../components/dashboard/StatCard';
+import { DashboardModeHero, DashboardQuickActions } from '../components/dashboard/DashboardModePanels';
+import { getDashboardModeConfig } from '../utils/dashboardModes';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -18,15 +20,155 @@ import {
 } from 'lucide-react';
 const API_URL = import.meta.env.VITE_API_URL;
 
+/** Match Salary page: only approved/paid nets count toward payroll totals */
+function isCountablePayroll(p) {
+  return p && ["approved", "paid"].includes(String(p.status || "").toLowerCase());
+}
+
+function payrollMonthKeyOf(p) {
+  if (p?.payrollMonth) return String(p.payrollMonth);
+  const pd = p?.payDate ? new Date(p.payDate) : null;
+  if (!pd || Number.isNaN(pd.getTime())) return null;
+  return `${pd.getFullYear()}-${String(pd.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function formatEtb(v) {
+  return `${Number(v || 0).toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })} ETB`;
+}
+
+/** Org-tree path only — never legacy Department names */
+function unitPathParts(emp) {
+  return String(emp?.unitPath || "")
+    .split(" › ")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function toId(val) {
+  if (!val) return null;
+  if (typeof val === "object") return String(val._id || val.id || "") || null;
+  return String(val);
+}
+
+function isOrgWideEmployee(emp) {
+  return (
+    emp?.role === "superadmin" ||
+    emp?.role === "admin" ||
+    emp?.role === "hr" ||
+    emp?.scopeLevel === "organization"
+  );
+}
+
+/** Flatten sector tree / list into id → { name, level } */
+function indexSectorNodes(nodes, map = {}) {
+  for (const n of nodes || []) {
+    const id = toId(n._id || n.id);
+    if (id) {
+      map[id] = {
+        name: n.name || "Unknown",
+        level: n.level,
+      };
+    }
+    if (Array.isArray(n.children) && n.children.length) {
+      indexSectorNodes(n.children, map);
+    }
+  }
+  return map;
+}
+
+/**
+ * Group at one hierarchy level using Sector ids (not department labels).
+ * Returns null to exclude from the current level chart.
+ */
+function distributionBucket(emp, level, sectorById = {}) {
+  if (level === "sector") {
+    if (isOrgWideEmployee(emp) && !emp?.sectorId) return "Organization";
+    const sid = toId(emp?.sectorId);
+    if (sid && sectorById[sid]) return sectorById[sid].name;
+    // Fallback: top path label only when employee is sector-linked
+    if (sid) {
+      const parts = unitPathParts(emp);
+      return parts[0] || "Unassigned";
+    }
+    return "Unassigned";
+  }
+
+  if (level === "sub_sector") {
+    const id = toId(emp?.subSectorId);
+    if (id && sectorById[id]) return sectorById[id].name;
+    const parts = unitPathParts(emp);
+    if (parts.length >= 2) return parts[1];
+    return null;
+  }
+
+  // unit (sub-sub-sector)
+  const id = toId(emp?.subSubSectorId);
+  if (id && sectorById[id]) return sectorById[id].name;
+  const parts = unitPathParts(emp);
+  if (parts.length >= 3) return parts[2];
+  return null;
+}
+
+function defaultDistributionLevel(modeId) {
+  if (modeId === "manager" || modeId === "unit_manager") return "unit";
+  if (modeId === "sector_lead") return "sub_sector";
+  return "sector"; // superadmin, admin, hr
+}
+
+function distributionLevelOptions(modeId) {
+  if (modeId === "superadmin" || modeId === "admin" || modeId === "hr") {
+    return [
+      { id: "sector", label: "Sectors" },
+      { id: "sub_sector", label: "Sub-sectors" },
+      { id: "unit", label: "Units" },
+    ];
+  }
+  if (modeId === "sector_lead") {
+    return [
+      { id: "sub_sector", label: "Sub-sectors" },
+      { id: "unit", label: "Units" },
+    ];
+  }
+  return [{ id: "unit", label: "Units" }];
+}
+
+function colorForLabel(name) {
+  let hash = 0;
+  const s = String(name || "");
+  for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
+  const hue = hash % 360;
+  return `hsl(${hue} 65% 48%)`;
+}
+
+function buildDistributionData(employees, level, sectorById) {
+  const counts = {};
+  let skipped = 0;
+  for (const emp of employees || []) {
+    const bucket = distributionBucket(emp, level, sectorById);
+    if (!bucket) {
+      skipped += 1;
+      continue;
+    }
+    counts[bucket] = (counts[bucket] || 0) + 1;
+  }
+  const data = Object.keys(counts)
+    .sort((a, b) => counts[b] - counts[a] || a.localeCompare(b))
+    .map((name) => ({
+      name,
+      value: counts[name],
+      color: colorForLabel(name),
+    }));
+  return { data, skipped };
+}
+
 const Dashboard = () => {
 
   const wrapperStyle = {
     paddingBottom: "20px",
     marginTop: "20px"
-  };
-
-  const statCardsContainerStyle = {    
-    alignItems: "stretch",
   };
 
   const weeklyAttendanceContainerStyle = {
@@ -37,20 +179,39 @@ const Dashboard = () => {
     marginBottom: "20px"
   }
 
-  const statCardStyle = {
-    height: "150px"
-  };
-
   const marginStyle = {
     marginBottom: "20px"
   };
 
-  const { user, isHR } = useAuth();
+  const auth = useAuth();
+  const { user, isSuperAdmin, scopeLevel, canAccessAdminConsole } = auth;
+  const mode = getDashboardModeConfig(user);
+  const manageView = mode.showTeamKpis;
   const navigate = useNavigate();
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [attendanceStats, setAttendanceStats] = useState({ present: 0, absent: 0, total: 0, late: 0, leave: 0 });
   const [totalEmployees, setTotalEmployees] = useState(null);
+  const [scopedEmployees, setScopedEmployees] = useState([]);
+  const [sectorById, setSectorById] = useState({});
+  const [distributionLevel, setDistributionLevel] = useState(() =>
+    defaultDistributionLevel(mode?.id)
+  );
+
+  const scopeLabel = (() => {
+    if (isSuperAdmin || user?.scopeLevel === 'organization') return 'Organization-wide';
+    const unit =
+      user?.subSubSectorId?.pathNames?.join(' › ') ||
+      user?.subSectorId?.pathNames?.join(' › ') ||
+      user?.sectorId?.pathNames?.join(' › ') ||
+      user?.unitPath ||
+      null;
+    if (unit) return unit;
+    if (scopeLevel) return `Scope: ${String(scopeLevel).replaceAll('_', ' ')}`;
+    return manageView ? 'Management scope' : 'Personal';
+  })();
+
+  const modeAuthCaps = { canAccessAdminConsole };
 
   const API_BASE = API_URL;
   const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
@@ -62,27 +223,64 @@ const Dashboard = () => {
       const dateText = isNaN(d.getTime())
         ? String(e.date)
         : `${d.toLocaleDateString()}${e.time ? `, ${e.time}` : ''}`;
+      const dateKey = !isNaN(d.getTime())
+        ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+        : null;
       return {
         id: e._id || e.id,
         title: e.title,
         type: e.type || 'meeting',
         date: dateText,
+        dateKey,
       };
     } catch {
-      return { id: e._id || e.id, title: e.title, type: e.type || 'meeting', date: String(e.date) };
+      return { id: e._id || e.id, title: e.title, type: e.type || 'meeting', date: String(e.date), dateKey: null };
     }
+  };
+
+  const openEventInCalendar = (event) => {
+    navigate('/calendar', {
+      state: event?.dateKey ? { selectedDate: event.dateKey } : undefined,
+    });
   };
 
   const fetchUpcoming = async () => {
     if (!token) return;
     setLoadingEvents(true);
     try {
-      const res = await axios.get(`${API_BASE}/api/events/upcoming`, {
-        params: { limit: 5 },
-        headers: { Authorization: `Bearer ${token}` },
+      const today = new Date();
+      const ymd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      const headers = { Authorization: `Bearer ${token}` };
+
+      // Dashboard only: today + upcoming (calendar page still uses /upcoming alone)
+      const [todayRes, upcomingRes] = await Promise.all([
+        axios.get(`${API_BASE}/api/events/date/${ymd}`, { headers }),
+        axios.get(`${API_BASE}/api/events/upcoming`, {
+          params: { limit: 8 },
+          headers,
+        }),
+      ]);
+
+      const todayItems = Array.isArray(todayRes.data?.data) ? todayRes.data.data : [];
+      const upcomingItems = Array.isArray(upcomingRes.data?.data)
+        ? upcomingRes.data.data
+        : [];
+
+      const byId = new Map();
+      for (const e of [...todayItems, ...upcomingItems]) {
+        const id = String(e._id || e.id);
+        if (!id || byId.has(id)) continue;
+        byId.set(id, e);
+      }
+
+      const merged = Array.from(byId.values()).sort((a, b) => {
+        const da = new Date(a.date).getTime();
+        const db = new Date(b.date).getTime();
+        if (da !== db) return da - db;
+        return String(a.time || "").localeCompare(String(b.time || ""));
       });
-      const items = Array.isArray(res.data?.data) ? res.data.data : [];
-      setUpcomingEvents(items.map(formatEvent));
+
+      setUpcomingEvents(merged.slice(0, 8).map(formatEvent));
     } catch (err) {
       console.error(err);
       toast.error(err.response?.data?.message || 'Failed to load upcoming events');
@@ -122,39 +320,6 @@ const Dashboard = () => {
       }
     };
     fetchTotalEmployees();
-    // Fetch salary progression data (aggregate payroll netSalary per month for last 6 months)
-    const fetchSalaryData = async () => {
-      if (!token) return;
-      try {
-        const res = await axios.get(`${API_BASE}/api/payroll`, { headers: { Authorization: `Bearer ${token}` } });
-        const payrolls = Array.isArray(res.data?.data) ? res.data.data : [];
-        const now = new Date();
-
-        // Prepare map for last 6 months
-        const monthsMap = new Map();
-        for (let i = 5; i >= 0; i--) {
-          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-          monthsMap.set(key, { date: d, total: 0, label: d.toLocaleString('default', { month: 'short' }) });
-        }
-
-        for (const p of payrolls) {
-          const pd = p.payDate ? new Date(p.payDate) : null;
-          if (!pd || isNaN(pd.getTime())) continue;
-          const key = `${pd.getFullYear()}-${String(pd.getMonth() + 1).padStart(2, '0')}`;
-          if (monthsMap.has(key)) {
-            monthsMap.get(key).total += Number(p.netSalary || 0);
-          }
-        }
-
-        const arr = Array.from(monthsMap.values()).map(m => ({ month: m.label, amount: m.total }));
-        setSalaryData(arr);
-      } catch (err) {
-        console.error('Failed to load salary progression data', err);
-        // keep existing fallback/mock data already in state
-      }
-    };
-    fetchSalaryData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -179,7 +344,6 @@ const Dashboard = () => {
     return arr;
   });
 
-  const [departmentData, setDepartmentData] = useState([]);
   const [payrollThisMonth, setPayrollThisMonth] = useState(null);
   const [pendingRequestsCount, setPendingRequestsCount] = useState(null);
   // Employee personal stats
@@ -189,6 +353,18 @@ const Dashboard = () => {
   const [leaveBalanceDays, setLeaveBalanceDays] = useState(null);
   const [salaryDebug, setSalaryDebug] = useState(null);
   const [showSalaryDebug, setShowSalaryDebug] = useState(false);
+
+  const distributionOptions = distributionLevelOptions(mode.id);
+  const distributionBuilt = useMemo(
+    () => buildDistributionData(scopedEmployees, distributionLevel, sectorById),
+    [scopedEmployees, distributionLevel, sectorById]
+  );
+  const departmentData = distributionBuilt.data;
+  const distributionSkipped = distributionBuilt.skipped;
+
+  useEffect(() => {
+    setDistributionLevel(defaultDistributionLevel(mode.id));
+  }, [mode.id]);
 
   useEffect(() => {
     // Fetch weekly attendance for last 5 weekdays and replace mock
@@ -245,87 +421,76 @@ const Dashboard = () => {
 
     const fetchDepartments = async () => {
       try {
-        // Try to use a departments public endpoint first
-        const deptRes = await axios.get(`${API_BASE}/api/departments/public-list`);
-        // Fetch employees to count per department (fallback if departments endpoint doesn't include counts)
-        const empRes = await axios.get(`${API_BASE}/api/employees`, { headers: { Authorization: `Bearer ${token}` } });
-
+        const headers = { Authorization: `Bearer ${token}` };
+        const [empRes, sectorRes] = await Promise.all([
+          axios.get(`${API_BASE}/api/employees`, { headers }),
+          axios.get(`${API_BASE}/api/sectors/tree`, { headers }),
+        ]);
         const employees = Array.isArray(empRes.data?.data) ? empRes.data.data : [];
-        const deptNames = Array.isArray(deptRes.data?.data) ? deptRes.data.data.map(d => d.name) : [];
-
-        // Count employees per department name (use employee.department if it's a name, or employee.department.name)
-        const counts = {};
-        employees.forEach(emp => {
-          const name = (emp?.department && (typeof emp.department === 'string' ? emp.department : emp.department?.name)) || 'Others';
-          counts[name] = (counts[name] || 0) + 1;
-        });
-
-        // Ensure departments from public list are included even if count is zero
-        deptNames.forEach(n => { counts[n] = counts[n] || 0; });
-
-        const names = Object.keys(counts);
-
-        // assign a random, visually distinct color per department
-        const usedHues = [];
-        const minHueDistance = 30; // degrees
-
-        const pickUniqueHue = () => {
-          let attempts = 0;
-          while (attempts < 50) {
-            const hue = Math.floor(Math.random() * 360);
-            const ok = usedHues.every(h => {
-              const d = Math.abs(h - hue);
-              const dist = Math.min(d, 360 - d);
-              return dist >= minHueDistance;
-            });
-            if (ok) {
-              usedHues.push(hue);
-              return hue;
-            }
-            attempts += 1;
-          }
-          // fallback
-          const fallback = Math.floor(Math.random() * 360);
-          usedHues.push(fallback);
-          return fallback;
-        };
-
-        const data = names.map(name => {
-          const hue = pickUniqueHue();
-          return { name, value: counts[name], color: `hsl(${hue} 70% 50%)` };
-        });
-        setDepartmentData(data);
+        setScopedEmployees(employees);
+        setSectorById(indexSectorNodes(sectorRes.data?.data || []));
       } catch (err) {
         console.error('Failed to load department data', err);
-        // fallback to previous mock
-        setDepartmentData([
-          { name: 'Engineering', value: 35, color: '#3b82f6' },
-          { name: 'Sales', value: 25, color: '#10b981' },
-          { name: 'Marketing', value: 20, color: '#f59e0b' },
-          { name: 'HR', value: 10, color: '#ef4444' },
-          { name: 'Others', value: 10, color: '#8b5cf6' },
-        ]);
+        setScopedEmployees([]);
+        setSectorById({});
       }
     };
 
     fetchDepartments();
-    const fetchPayrollThisMonth = async () => {
+
+    /** Scoped payroll list → this-month net (approved/paid) + 6-month progression */
+    const fetchPayrollDashboard = async () => {
       if (!token) return;
       try {
-        const payRes = await axios.get(`${API_BASE}/api/payroll`, { headers: { Authorization: `Bearer ${token}` } });
+        const payRes = await axios.get(`${API_BASE}/api/payroll`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         const payrolls = Array.isArray(payRes.data?.data) ? payRes.data.data : [];
+        const countable = payrolls.filter(isCountablePayroll);
+
         const now = new Date();
-        const month = now.getMonth();
-        const year = now.getFullYear();
-        const monthTotal = payrolls.reduce((sum, p) => {
-          const pd = p.payDate ? new Date(p.payDate) : null;
-          if (!pd) return sum;
-          if (pd.getMonth() === month && pd.getFullYear() === year) return sum + (Number(p.netSalary) || 0);
-          return sum;
+        const thisMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+        const monthTotal = countable.reduce((sum, p) => {
+          return payrollMonthKeyOf(p) === thisMonthKey
+            ? sum + (Number(p.netSalary) || 0)
+            : sum;
         }, 0);
         setPayrollThisMonth(monthTotal);
+
+        const monthsMap = new Map();
+        for (let i = 5; i >= 0; i--) {
+          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+          monthsMap.set(key, {
+            total: 0,
+            label: d.toLocaleString("default", { month: "short" }),
+          });
+        }
+        for (const p of countable) {
+          const key = payrollMonthKeyOf(p);
+          if (key && monthsMap.has(key)) {
+            monthsMap.get(key).total += Number(p.netSalary || 0);
+          }
+        }
+        setSalaryData(
+          Array.from(monthsMap.values()).map((m) => ({
+            month: m.label,
+            amount: m.total,
+          }))
+        );
+
+        // Personal dashboard: prefer latest approved/paid net over static employee.salary
+        if (!manageView && countable.length) {
+          const sorted = [...countable].sort((a, b) => {
+            const da = new Date(a.payDate || 0).getTime();
+            const db = new Date(b.payDate || 0).getTime();
+            return db - da;
+          });
+          const latestNet = Number(sorted[0]?.netSalary);
+          if (!Number.isNaN(latestNet)) setCurrentSalary(latestNet);
+        }
       } catch (err) {
-        console.error('Failed to load payrolls', err);
+        console.error("Failed to load payrolls", err);
       }
     };
 
@@ -342,14 +507,14 @@ const Dashboard = () => {
       }
     };
 
-    fetchPayrollThisMonth();
+    fetchPayrollDashboard();
     fetchPendingLeaveRequests();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, manageView]);
 
   // Employee-specific data (hours this week, attendance rate, salary, leave balance)
   useEffect(() => {
-    if (!token || !user || isHR) return;
+    if (!token || !user || manageView) return;
 
     const isoDate = (d) => {
       const dd = new Date(d);
@@ -446,13 +611,19 @@ const Dashboard = () => {
               // optionally notify user in UI for easier debugging
               // toast.info('Employee salary not found (check server data)');
             }
-            setCurrentSalary(salaryVal != null ? Number(salaryVal) : null);
+            setCurrentSalary((prev) =>
+              prev != null ? prev : salaryVal != null ? Number(salaryVal) : null
+            );
           } else {
-            setCurrentSalary(user?.salary ?? null);
+            setCurrentSalary((prev) =>
+              prev != null ? prev : user?.salary != null ? Number(user.salary) : null
+            );
           }
         } catch (e) {
           console.error('Failed to fetch employee details', e);
-          setCurrentSalary(user?.salary ?? null);
+          setCurrentSalary((prev) =>
+            prev != null ? prev : user?.salary != null ? Number(user.salary) : null
+          );
         }
 
         // leave balance: sum approved leave days for this user
@@ -471,7 +642,7 @@ const Dashboard = () => {
     };
 
     fetchEmployeeStats();
-  }, [token, user, isHR]);
+  }, [token, user, manageView]);
 
   const [activities, setActivities] = useState([]);
   const [loadingActivities, setLoadingActivities] = useState(false);
@@ -483,13 +654,13 @@ const Dashboard = () => {
     { id: 4, user: 'Jossy Chencha', action: 'applied for Engineering role', time: '1 day ago', type: 'recruitment' },
   ];
 
-  const fetchActivities = async (limit = isHR ? 6 : 8) => {
+  const fetchActivities = async (limit = manageView ? 6 : 8) => {
     if (!token) return;
     setLoadingActivities(true);
     try {
       const params = { limit };
-      // If not HR, only fetch my activities
-      if (!isHR) params.mine = true;
+      // If not management view, only fetch my activities
+      if (!manageView) params.mine = true;
       const res = await axios.get(`${API_BASE}/api/activities`, { params, headers: { Authorization: `Bearer ${token}` } });
       const list = Array.isArray(res.data?.data) ? res.data.data : [];
       setActivities(list);
@@ -502,79 +673,65 @@ const Dashboard = () => {
 
   // upcomingEvents now comes from API
 
-  if (isHR) {
+  if (manageView) {
     return (
       <div className="container mx-auto p-6 space-y-8">
-        {/* Welcome Section */}
-        <div className="bg-gradient-hero rounded-2xl p-8 
-                        text-black dark:text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold mb-2">{`Welcome back, ${user?.name}!`}</h1>
-              <p className="text-gray-700 dark:text-blue-100">
-                Here's what's happening in your organization today.
-              </p>
-            </div>
-            <div className="hidden md:block">
-              <div className="bg-white/90 dark:bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                <div className="text-2xl font-bold text-black dark:text-white">{new Date().toLocaleDateString()}</div>
-                <div className="text-sm text-gray-600 dark:text-blue-100">Today</div>
-              </div>
-            </div>
-          </div>
-        </div>
-        {/* Stats Grid */}
-        <div style={wrapperStyle} className="flex flex-wrap gap-4 mb-5">
-          <div style={statCardsContainerStyle} className="flex-1 min-w-[200px] sm:min-w-[220px] md:min-w-[240px]">
+        <DashboardModeHero mode={mode} userName={user?.name} scopeLabel={scopeLabel} />
+        <DashboardQuickActions mode={mode} authCaps={modeAuthCaps} />
+
+        {/* Stats Grid — equal width/height cards */}
+        <div
+          style={wrapperStyle}
+          className={`grid gap-4 mb-5 items-stretch grid-cols-1 sm:grid-cols-2 ${
+            mode.showPayrollKpi ? 'xl:grid-cols-5 lg:grid-cols-3' : 'lg:grid-cols-4'
+          }`}
+        >
+          <StatCard
+            title={
+              mode.id === 'manager' || mode.id === 'unit_manager'
+                ? 'Team Size'
+                : 'Total Employees'
+            }
+            value={totalEmployees !== null ? String(totalEmployees) : '0'}
+            change="+0"
+            icon={Users}
+            trend="up"
+          />
+          <StatCard
+            title="Present Today"
+            value={String(attendanceStats.present)}
+            change="+0"
+            icon={UserCheck}
+            trend="up"
+          />
+          <StatCard
+            title="Absent Today"
+            value={String(attendanceStats.absent)}
+            change="-2"
+            icon={Users}
+            trend="down"
+          />
+          {mode.showPayrollKpi && (
             <StatCard
-              style={statCardStyle}
-              title="Total Employees"
-              value={totalEmployees !== null ? String(totalEmployees) : '0'}
-              change="+0"
-              icon={Users}
-              trend="up"
-            />
-          </div>
-          <div style={statCardsContainerStyle} className="flex-1 min-w-[200px] sm:min-w-[220px] md:min-w-[240px]">
-            <StatCard
-              style={statCardStyle}
-              title="Present Today"
-              value={String(attendanceStats.present)}
-              change="+0"
-              icon={UserCheck}
-              trend="up"
-            />
-          </div>
-          <div style={statCardsContainerStyle} className="flex-1 min-w-[200px] sm:min-w-[220px] md:min-w-[240px]">
-            <StatCard
-              style={statCardStyle}
-              title="Absent Today"
-              value={String(attendanceStats.absent)}
-              change="-2"
-              icon={Users}
-              trend="down"
-            />
-          </div>
-          <div style={statCardsContainerStyle} className="flex-1 min-w-[200px] sm:min-w-[220px] md:min-w-[240px]">
-            <StatCard
-              style={statCardStyle}
-              title="Payroll This Month"
-              value={payrollThisMonth !== null ? `$${Number(payrollThisMonth).toLocaleString()}` : '$0'}
-              change="+0%"
+              title="Net Payroll This Month"
+              value={payrollThisMonth !== null ? formatEtb(payrollThisMonth) : formatEtb(0)}
+              change="Approved / paid"
+              showVsLastMonth={false}
               icon={DollarSign}
               trend="up"
             />
-          </div>
-          <div style={statCardsContainerStyle} className="flex-1 min-w-[200px] sm:min-w-[220px] md:min-w-[240px]">
-            <StatCard
-              style={statCardStyle}
-              title="Pending Requests"
-              value={pendingRequestsCount !== null ? String(pendingRequestsCount) : '0'}
-              change="-3"
-              icon={Calendar}
-              trend="down"
-            />
-          </div>
+          )}
+          <StatCard
+            title={
+              mode.id === 'manager' || mode.id === 'unit_manager'
+                ? 'Pending Leave (Team)'
+                : 'Pending Requests'
+            }
+            value={pendingRequestsCount !== null ? String(pendingRequestsCount) : '0'}
+            change="-3"
+            icon={Calendar}
+            trend="down"
+          />
         </div>
         {/* Charts Section */}
         <div style={weeklyAttendanceContainerStyle} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -585,7 +742,11 @@ const Dashboard = () => {
                 <Activity className="w-5 h-5 text-primary" />
                 <span>Weekly Attendance</span>
               </CardTitle>
-              <CardDescription>Employee attendance trends this week</CardDescription>
+              <CardDescription>
+                {mode.id === 'manager' || mode.id === 'unit_manager'
+                  ? 'Your unit attendance this week'
+                  : 'Employee attendance trends this week'}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
@@ -594,40 +755,76 @@ const Dashboard = () => {
                   <XAxis dataKey="name" />
                   <YAxis />
                   <Tooltip />
-                  <Bar dataKey="present" fill="#3b82f6" />
+                  <Bar dataKey="present" fill="hsl(var(--primary))" />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
 
-          {/* Department Distribution */}
+          {/* Org distribution — one hierarchy level at a time */}
           <Card className="dashboard-card">
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Building2 className="w-5 h-5 text-primary" />
-                <span>Department Distribution</span>
-              </CardTitle>
-              <CardDescription>Employee distribution across departments</CardDescription>
+            <CardHeader className="space-y-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Building2 className="w-5 h-5 text-primary" />
+                    <span>
+                      {distributionLevel === "sector"
+                        ? "Sector Distribution"
+                        : distributionLevel === "sub_sector"
+                          ? "Sub-sector Distribution"
+                          : "Unit Distribution"}
+                    </span>
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    Headcount by Sector, Sub-sector, or Unit
+                  </CardDescription>
+                </div>
+                {distributionOptions.length > 1 && (
+                  <div className="flex flex-wrap gap-1">
+                    {distributionOptions.map((opt) => (
+                      <Button
+                        key={opt.id}
+                        type="button"
+                        size="sm"
+                        variant={distributionLevel === opt.id ? "default" : "outline"}
+                        className="h-8"
+                        onClick={() => setDistributionLevel(opt.id)}
+                      >
+                        {opt.label}
+                      </Button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={departmentData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={120}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {departmentData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
+              {departmentData.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-12 text-center">
+                  No employees placed at this level yet
+                </p>
+              ) : (
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={departmentData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={120}
+                      paddingAngle={5}
+                      dataKey="value"
+                    >
+                      {departmentData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value, name) => [`${value} people`, name]}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
               <div className="flex flex-wrap gap-2 mt-4">
                 {(() => {
                   const total = departmentData.reduce((sum, d) => sum + (d.value || 0), 0);
@@ -640,13 +837,19 @@ const Dashboard = () => {
                           style={{ backgroundColor: dept.color }}
                         />
                         <span className="text-sm text-muted-foreground">
-                          {dept.name} ({pct}%)
+                          {dept.name} · {dept.value} ({pct}%)
                         </span>
                       </div>
                     );
                   });
                 })()}
               </div>
+              {distributionSkipped > 0 && (
+                <p className="text-xs text-muted-foreground mt-3">
+                  {distributionSkipped} employee{distributionSkipped === 1 ? "" : "s"} not
+                  counted here (not assigned at this level).
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -660,7 +863,7 @@ const Dashboard = () => {
                 <Bell className="w-5 h-5 text-primary" />
                 <span>Recent Activities</span>
               </CardTitle>
-              <CardDescription>Latest employee activities</CardDescription>
+              <CardDescription>Latest activities in your scope</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
@@ -689,14 +892,14 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          {/* Upcoming Events */}
+          {/* Today + upcoming events (dashboard only) */}
           <Card className="dashboard-card">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <Calendar className="w-5 h-5 text-primary" />
-                <span>Upcoming Events</span>
+                <span>Today & Upcoming</span>
               </CardTitle>
-              <CardDescription>Important dates and deadlines</CardDescription>
+              <CardDescription>Events for today and the days ahead</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
@@ -704,10 +907,15 @@ const Dashboard = () => {
                   <p className="text-sm text-muted-foreground">Loading events…</p>
                 )}
                 {!loadingEvents && upcomingEvents.length === 0 && (
-                  <p className="text-sm text-muted-foreground">No upcoming events</p>
+                  <p className="text-sm text-muted-foreground">No events for today or upcoming</p>
                 )}
                 {!loadingEvents && upcomingEvents.map((event) => (
-                  <div key={event.id} className="flex items-center justify-between p-3 rounded-lg border">
+                  <button
+                    key={event.id}
+                    type="button"
+                    onClick={() => openEventInCalendar(event)}
+                    className="flex w-full items-center justify-between rounded-lg border p-3 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
                     <div>
                       <p className="font-medium">{event.title}</p>
                       <p className="text-sm text-muted-foreground">{event.date}</p>
@@ -721,7 +929,7 @@ const Dashboard = () => {
                     }>
                       {event.type}
                     </Badge>
-                  </div>
+                  </button>
                 ))}
               </div>
               <Button 
@@ -738,67 +946,41 @@ const Dashboard = () => {
     );
   }
 
-  // Employee Dashboard
+  // Employee Mode
   return (
     <div className="container mx-auto p-6 space-y-8">
-      {/* Welcome Section */}
-      <div className="bg-gradient-hero rounded-2xl p-8 text-black dark:text-white">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold mb-2">Welcome back, {user?.name}!</h1>
-            <p className="text-blue-100">Have a productive day ahead.</p>
-          </div>
-          <div className="hidden md:block">
-            <Button 
-              variant="secondary" 
-              className="bg-white/10 backdrop-blur-sm border-white/20 hover:bg-white/20"
-              onClick={() => navigate('/attendance')}
-            >
-              <Clock className="w-4 h-4 mr-2" />
-              Mark Attendance
-            </Button>
-          </div>
-        </div>
-      </div>
+      <DashboardModeHero mode={mode} userName={user?.name} scopeLabel={scopeLabel} />
+      <DashboardQuickActions mode={mode} authCaps={modeAuthCaps} />
 
-      {/* Personal Stats */}
-      <div style={wrapperStyle} className="flex flex-wrap gap-4 mb-5">
-        <div style={statCardsContainerStyle} className="flex-1 min-w-[200px] sm:min-w-[220px] md:min-w-[240px]">
-          <StatCard
-            style={statCardStyle}
-            title="Hours This Week"
-            value={hoursThisWeek !== null ? String(hoursThisWeek) : '--'}
-            change="+2.5"
-            icon={Clock}
-            trend="up"
-          />
-        </div>
-        <div style={statCardsContainerStyle} className="flex-1 min-w-[200px] sm:min-w-[220px] md:min-w-[240px]">
-          <StatCard
-            style={statCardStyle}
-            title="Attendance Rate"
-            value={attendanceRateUser || '--'}
-            change="+2%"
-            icon={UserCheck}
-            trend="up"
-          />
-        </div>
-        <div style={statCardsContainerStyle} className="flex-1 min-w-[200px] sm:min-w-[220px] md:min-w-[240px]">
-          <StatCard
-            style={statCardStyle}
-            title="Current Salary"
-            value={currentSalary !== null ? `$${Number(currentSalary).toLocaleString()}` : '--'}
-            icon={DollarSign}
-          />
-        </div>
-        <div style={statCardsContainerStyle} className="flex-1 min-w-[200px] sm:min-w-[220px] md:min-w-[240px]">
-          <StatCard
-            style={statCardStyle}
-            title="Leave Balance"
-            value={leaveBalanceDays !== null ? `${leaveBalanceDays} days` : '--'}
-            icon={Calendar}
-          />
-        </div>
+      {/* Personal Stats — equal width/height cards */}
+      <div
+        style={wrapperStyle}
+        className="grid grid-cols-1 gap-4 mb-5 items-stretch sm:grid-cols-2 lg:grid-cols-4"
+      >
+        <StatCard
+          title="Hours This Week"
+          value={hoursThisWeek !== null ? String(hoursThisWeek) : '--'}
+          change="+2.5"
+          icon={Clock}
+          trend="up"
+        />
+        <StatCard
+          title="Attendance Rate"
+          value={attendanceRateUser || '--'}
+          change="+2%"
+          icon={UserCheck}
+          trend="up"
+        />
+        <StatCard
+          title="Latest Net Pay"
+          value={currentSalary !== null ? formatEtb(currentSalary) : '--'}
+          icon={DollarSign}
+        />
+        <StatCard
+          title="Leave Balance"
+          value={leaveBalanceDays !== null ? `${leaveBalanceDays} days` : '--'}
+          icon={Calendar}
+        />
       </div>
 
       {/* Personal Charts */}
@@ -810,7 +992,7 @@ const Dashboard = () => {
               <TrendingUp className="w-5 h-5 text-primary" />
               <span>Salary Progression</span>
             </CardTitle>
-            <CardDescription>Your salary growth over time</CardDescription>
+            <CardDescription>Your approved / paid net pay (last 6 months)</CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
@@ -818,64 +1000,51 @@ const Dashboard = () => {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />
-                <Tooltip />
-                <Line type="monotone" dataKey="amount" stroke="#3b82f6" strokeWidth={3} />
+                <Tooltip formatter={(value) => formatEtb(value)} />
+                <Line type="monotone" dataKey="amount" stroke="hsl(var(--primary))" strokeWidth={3} />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        {/* Quick Actions */}
+        {/* Calendar preview (quick actions are above via mode panel) */}
         <Card className="dashboard-card">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
-              <Target className="w-5 h-5 text-primary" />
-              <span>Quick Actions</span>
+              <Calendar className="w-5 h-5 text-primary" />
+              <span>My Calendar</span>
             </CardTitle>
-            <CardDescription>Frequently used actions</CardDescription>
+            <CardDescription>Today and upcoming dates</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-4">
-              <Button 
-                variant="outline" 
-                className="h-20 flex-col space-y-2"
-                onClick={() => navigate('/attendance')}
-              >
-                <UserCheck className="w-6 h-6" />
-                <span>Mark Attendance</span>
-              </Button>
-              <Button 
-                variant="outline" 
-                className="h-20 flex-col space-y-2"
-                onClick={() => navigate('/leave-requests')}
-              >
-                <Calendar className="w-6 h-6" />
-                <span>Request Leave</span>
-              </Button>
-              <Button 
-                variant="outline" 
-                className="h-20 flex-col space-y-2"
-                onClick={() => navigate('/payslips')}
-              >
-                <DollarSign className="w-6 h-6" />
-                <span>View Payslip</span>
-              </Button>
-              <Button 
-                variant="outline" 
-                className="h-20 flex-col space-y-2"
-                onClick={() => navigate('/goals')}
-              >
-                <Award className="w-6 h-6" />
-                <span>My Goals</span>
-              </Button>
+            <div className="space-y-3">
+              {!loadingEvents && upcomingEvents.slice(0, 3).map((event) => (
+                <button
+                  key={event.id}
+                  type="button"
+                  onClick={() => openEventInCalendar(event)}
+                  className="flex w-full items-center justify-between rounded-lg border p-3 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <div>
+                    <p className="font-medium">{event.title}</p>
+                    <p className="text-sm text-muted-foreground">{event.date}</p>
+                  </div>
+                  <Badge variant="secondary">{event.type}</Badge>
+                </button>
+              ))}
+              {!loadingEvents && upcomingEvents.length === 0 && (
+                <p className="text-sm text-muted-foreground">No events for today or upcoming</p>
+              )}
             </div>
+            <Button variant="outline" className="w-full mt-4" onClick={() => navigate('/calendar')}>
+              View Full Calendar
+            </Button>
           </CardContent>
         </Card>
       </div>
 
       {/* Personal Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* My Recent Activity */}
+      <div className="grid grid-cols-1 gap-6">
         <Card style={marginStyle} className="dashboard-card">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
@@ -885,69 +1054,24 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="flex items-center space-x-3 p-3 rounded-lg bg-accent">
-                <UserCheck className="w-5 h-5 text-primary" />
-                <div>
-                  <p className="text-sm font-medium">Marked attendance</p>
-                  <p className="text-xs text-muted-foreground">Today, 9:15 AM</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3 p-3 rounded-lg hover:bg-accent transition-colors">
-                <Calendar className="w-5 h-5 text-orange-500" />
-                <div>
-                  <p className="text-sm font-medium">Leave request approved</p>
-                  <p className="text-xs text-muted-foreground">Yesterday, 3:30 PM</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3 p-3 rounded-lg hover:bg-accent transition-colors">
-                <DollarSign className="w-5 h-5 text-green-500" />
-                <div>
-                  <p className="text-sm font-medium">Salary credited</p>
-                  <p className="text-xs text-muted-foreground">3 days ago</p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Upcoming Events */}
-        <Card className="dashboard-card">
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Calendar className="w-5 h-5 text-primary" />
-              <span>My Calendar</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {loadingEvents && (
-                <p className="text-sm text-muted-foreground">Loading events…</p>
-              )}
-              {!loadingEvents && upcomingEvents.slice(0, 3).map((event) => (
-                <div key={event.id} className="flex items-center justify-between p-3 rounded-lg border">
-                  <div>
-                    <p className="font-medium">{event.title}</p>
-                    <p className="text-sm text-muted-foreground">{event.date}</p>
+              {(loadingActivities ? [] : activities).slice(0, 5).map((activity) => (
+                <div key={activity.id} className="flex items-center space-x-3 p-3 rounded-lg hover:bg-accent transition-colors">
+                  <Avatar className="w-8 h-8">
+                    <AvatarImage src={activity.actorAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(activity.actorName || activity.user || 'U')}&background=3b82f6&color=fff`} />
+                    <AvatarFallback>{(activity.actorName || activity.user || 'U').split(' ').map(n => n[0]).join('')}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <p className="text-sm">
+                      <span className="font-medium">{activity.actorName || activity.user}</span> {activity.action}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{new Date(activity.createdAt || activity.time || Date.now()).toLocaleString()}</p>
                   </div>
-                  <Badge variant={
-                    event.type === 'meeting' ? 'default' :
-                    event.type === 'holiday' ? 'secondary' :
-                    event.type === 'training' ? 'outline' :
-                    event.type === 'personal' ? 'outline' :
-                    'secondary'
-                  }>
-                    {event.type}
-                  </Badge>
                 </div>
               ))}
+              {!loadingActivities && activities.length === 0 && (
+                <p className="text-sm text-muted-foreground">No recent activity yet</p>
+              )}
             </div>
-            <Button 
-              variant="outline" 
-              className="w-full mt-4"
-              onClick={() => navigate('/calendar')}
-            >
-              View Full Calendar
-            </Button>
           </CardContent>
         </Card>
       </div>
