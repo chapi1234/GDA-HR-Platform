@@ -16,12 +16,8 @@ export default function authorize(roles = []) {
         });
       }
 
-      // Extract the token
       const token = authHeader.split(" ")[1];
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-      console.log("Decoded Token:", decoded);
-      console.log("Required Roles:", roles);
 
       if (roles.length && !roles.includes(decoded.role)) {
         return res.status(403).json({
@@ -33,12 +29,19 @@ export default function authorize(roles = []) {
       req.user = decoded;
       next();
     } catch (err) {
-      console.error('authorize error:', err && err.message ? err.message : err);
-      // Handle common JWT errors with a 401 so client can re-authenticate
-      if (err && (err.name === 'JsonWebTokenError' || err.message === 'invalid signature' || err.name === 'TokenExpiredError')) {
-        return res.status(401).json({ status: 'failed', message: 'Invalid or expired token' });
+      console.error("authorize error:", err?.message || err);
+      if (
+        err &&
+        (err.name === "JsonWebTokenError" ||
+          err.message === "invalid signature" ||
+          err.name === "TokenExpiredError")
+      ) {
+        return res.status(401).json({
+          status: "failed",
+          message: "Invalid or expired token",
+        });
       }
-      res.status(500).json({ status: 'failed', message: 'Internal server error' });
+      res.status(500).json({ status: "failed", message: "Internal server error" });
     }
   };
 }
