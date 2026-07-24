@@ -19,6 +19,8 @@ import {
 import { toast } from 'react-toastify';
 import axios from 'axios';
 import { postActivity } from '../lib/postActivity';
+import { useClientPagination } from '../hooks/useClientPagination';
+import ListPagination from '../components/ListPagination';
 const API_URL = import.meta.env.VITE_API_URL;
 
 const LeaveRequests = () => {
@@ -40,7 +42,8 @@ const LeaveRequests = () => {
     width: "200px"
   }
   
-  const { isHR, user } = useAuth();
+  const { canManage, user } = useAuth();
+  const canReview = canManage; // managers + HR + admin + superadmin
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -118,7 +121,7 @@ const LeaveRequests = () => {
   useEffect(() => {
     if (token) fetchLeaves();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, isHR]);
+  }, [token, canReview]);
 
   // Backend already scopes: HR = all, Employee = own only.
   // Do not filter by employeeId client-side to avoid hiding valid items when employeeId is missing/mismatched.
@@ -128,6 +131,12 @@ const LeaveRequests = () => {
     const matchesStatus = filterStatus === 'all' || request.status === filterStatus;
     return matchesSearch && matchesStatus;
   });
+
+  const leavePaging = useClientPagination(filteredRequests, 10, [
+    searchTerm,
+    filterStatus,
+    leaveRequests.length,
+  ]);
 
   const calculateDuration = (startDate, endDate) => {
     const start = new Date(startDate);
@@ -225,7 +234,7 @@ const LeaveRequests = () => {
         <div>
           <h1 className="text-3xl font-bold text-foreground">Leave Requests</h1>
           <p className="text-muted-foreground">
-            {isHR ? 'Manage employee leave requests' : 'Submit and track your leave requests'}
+            {canReview ? 'Manage employee leave requests' : 'Submit and track your leave requests'}
           </p>
         </div>
         <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
@@ -326,7 +335,7 @@ const LeaveRequests = () => {
             <CardContent>
               <div className="text-2xl font-bold">{pendingRequests}</div>
               <p className="text-xs text-muted-foreground">
-                {isHR ? 'Require your attention' : 'Awaiting approval'}
+                {canReview ? 'Require your attention' : 'Awaiting approval'}
               </p>
             </CardContent>
           </Card>
@@ -395,7 +404,7 @@ const LeaveRequests = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredRequests.map((request) => (
+            {leavePaging.pagedItems.map((request) => (
               <TableRow key={request.id}>
                 <TableCell>
                   <div className="flex items-center space-x-3">
@@ -424,7 +433,7 @@ const LeaveRequests = () => {
                 <TableCell>{new Date(request.appliedDate).toLocaleDateString()}</TableCell>
                 <TableCell>
                   <div className="flex space-x-2">
-                    {isHR && request.status === 'pending' && (
+                    {canReview && request.status === 'pending' && (
                       <>
                         <Button 
                           variant="ghost" 
@@ -444,7 +453,7 @@ const LeaveRequests = () => {
                         </Button>
                       </>
                     )}
-                    {!isHR && request.status === 'pending' && request.employeeId === (user?.employeeId || '') && (
+                    {!canReview && request.status === 'pending' && request.employeeId === (user?.employeeId || '') && (
                       <Button 
                         variant="ghost" 
                         size="sm"
@@ -460,6 +469,23 @@ const LeaveRequests = () => {
             ))}
           </TableBody>
         </Table>
+        {leavePaging.showControls && (
+          <div className="p-4 pt-0">
+            <ListPagination
+              page={leavePaging.page}
+              totalPages={leavePaging.totalPages}
+              hasPrev={leavePaging.hasPrev}
+              hasNext={leavePaging.hasNext}
+              rangeLabel={leavePaging.rangeLabel}
+              onPrev={() => leavePaging.setPage((p) => Math.max(1, p - 1))}
+              onNext={() =>
+                leavePaging.setPage((p) =>
+                  Math.min(leavePaging.totalPages, p + 1)
+                )
+              }
+            />
+          </div>
+        )}
       </Card>
 
       {filteredRequests.length === 0 && (
