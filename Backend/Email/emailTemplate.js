@@ -47,11 +47,9 @@ export function formatCurrency(amount) {
   if (Number.isNaN(numeric)) {
     return escapeHtml(amount);
   }
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
+  return `${new Intl.NumberFormat("en-ET", {
     maximumFractionDigits: 2,
-  }).format(numeric);
+  }).format(numeric)} ETB`;
 }
 
 export function getLogoAttachment() {

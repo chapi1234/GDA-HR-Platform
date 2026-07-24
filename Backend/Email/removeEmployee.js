@@ -9,7 +9,7 @@ export default function getRemoveEmployeeMailOptions(
   email,
   name,
   position,
-  department
+  unitPath
 ) {
   const effectiveDate = new Date().toLocaleDateString("en-US", {
     dateStyle: "full",
@@ -25,7 +25,7 @@ export default function getRemoveEmployeeMailOptions(
       { label: "Employee Name", value: escapeHtml(name) },
       { label: "Work Email", value: escapeHtml(email) },
       { label: "Last Position", value: escapeHtml(position || "Not specified") },
-      { label: "Department", value: escapeHtml(department || "Not specified") },
+      { label: "Unit / Sector", value: escapeHtml(unitPath || "Not specified") },
       { label: "Effective Date", value: escapeHtml(effectiveDate) },
       { label: "Portal Access", value: "Disabled" },
     ])}
@@ -35,7 +35,7 @@ export default function getRemoveEmployeeMailOptions(
     </p>
     <p>
       If you believe this action was taken in error, or if you need assistance with final
-      HR documentation, please contact the HR department as soon as possible.
+      HR documentation, please contact HR as soon as possible.
     </p>
     <div class="notice">
       Thank you for your service with Gammo Development Association. We wish you success

@@ -11,13 +11,13 @@ export default function getAddEmployeeMailOptions(
   email,
   name,
   position,
-  department,
+  unitPath,
   salary,
   password
 ) {
   const portalUrl = getPortalLoginUrl();
   const safePosition = escapeHtml(position || "Not specified");
-  const safeDepartment = escapeHtml(department || "Not specified");
+  const safeUnit = escapeHtml(unitPath || "Not specified");
 
   const contentHtml = `
     <p>Dear <strong>${escapeHtml(name)}</strong>,</p>
@@ -30,7 +30,7 @@ export default function getAddEmployeeMailOptions(
       { label: "Full Name", value: escapeHtml(name) },
       { label: "Work Email", value: escapeHtml(email) },
       { label: "Position", value: safePosition },
-      { label: "Department", value: safeDepartment },
+      { label: "Unit / Sector", value: safeUnit },
       { label: "Salary", value: formatCurrency(salary) },
       {
         label: "Temporary Password",
@@ -41,7 +41,7 @@ export default function getAddEmployeeMailOptions(
     <ol class="steps">
       <li>Visit the employee portal and sign in with your work email and temporary password.</li>
       <li>Change your password immediately after your first login.</li>
-      <li>Review your profile details and confirm your department assignment.</li>
+      <li>Review your profile details and confirm your sector / unit assignment.</li>
       <li>Contact HR if any information above is incorrect.</li>
     </ol>
     <p style="text-align:center;">

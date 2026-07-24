@@ -24,7 +24,7 @@ export default function getRegisterMailOptions(email, name) {
     <ul class="steps">
       <li>Sign in to your dashboard using your registered credentials.</li>
       <li>Complete your profile information if prompted.</li>
-      <li>Explore attendance, leave, payroll, and department tools available to your role.</li>
+      <li>Explore attendance, leave, payroll, and sector tools available to your role.</li>
     </ul>
     <p style="text-align:center;">
       <a class="button" href="${escapeHtml(portalUrl)}">Go to Sign-In Page</a>
