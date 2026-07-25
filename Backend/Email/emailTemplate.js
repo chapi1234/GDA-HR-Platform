@@ -2,9 +2,9 @@ import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 
-dotenv.config();
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Always load Backend/.env (not whatever cwd the process started in)
+dotenv.config({ path: path.join(__dirname, "..", ".env") });
 
 export const LOGO_CID = "gammoda-logo";
 const LOGO_PATH = path.join(__dirname, "assets", "logo.jpg");
@@ -17,7 +17,15 @@ export function getSupportEmail() {
 }
 
 export function getFrontendUrl() {
-  return (process.env.FRONTEND_URL || "http://localhost:8080").replace(/\/$/, "");
+  // Prefer FRONTEND_URL from .env (deployed); fall back to local dev
+  let url = String(process.env.FRONTEND_URL || "http://localhost:8080")
+    .trim()
+    .replace(/\/$/, "");
+  // Ensure absolute URL — bare "localhost" becomes a relative link in email clients
+  if (!/^https?:\/\//i.test(url)) {
+    url = `http://${url}`;
+  }
+  return url;
 }
 
 export function getPortalLoginUrl() {

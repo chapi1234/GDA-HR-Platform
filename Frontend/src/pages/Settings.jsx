@@ -12,7 +12,7 @@ import { Separator } from '../components/ui/separator';
 import { Badge } from '../components/ui/badge';
 import { 
   Settings as SettingsIcon, Bell, Palette, Globe, Shield, 
-  Monitor, Sun, Moon, Smartphone, Save, Download, Upload 
+  Monitor, Sun, Moon, Smartphone, Save, Download, Upload, Check 
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import * as XLSX from 'xlsx';
@@ -34,10 +34,6 @@ const Settings = () => {
 
   const button = {
     width: "200px"
-  };
-
-  const colorMargin = {
-    marginBottom: "10px"
   };
 
   const { user } = useAuth();
@@ -186,22 +182,26 @@ const Settings = () => {
 
                   <div className="space-y-2">
                     <Label>Color Scheme</Label>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       {colorSchemes.map((scheme) => (
                         <div
-                          style={colorMargin}
                           key={scheme.value}
-                          className={`flex items-center justify-between p-4 rounded-lg border cursor-pointer transition-all duration-200 hover:bg-accent hover:scale-[1.02] ${
+                          className={`flex items-center justify-between gap-2 p-3 sm:p-4 rounded-lg border cursor-pointer transition-all duration-200 hover:bg-accent hover:scale-[1.02] ${
                             colorScheme === scheme.value ? 'ring-2 ring-primary bg-accent' : ''
                           }`}
                           onClick={() => setColorScheme(scheme.value)}
                         >
-                          <div className="flex items-center space-x-3">
-                            <div className={`w-5 h-5 rounded-full ${scheme.color} shadow-sm`} />
-                            <span className="font-medium">{scheme.label}</span>
+                          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                            <div className={`w-5 h-5 shrink-0 rounded-full ${scheme.color} shadow-sm`} />
+                            <span className="font-medium truncate">{scheme.label}</span>
                           </div>
                           {colorScheme === scheme.value && (
-                            <Badge variant="default" className="text-xs font-medium">Selected</Badge>
+                            <>
+                              <Check className="w-4 h-4 shrink-0 text-primary sm:hidden" aria-label="Selected" />
+                              <Badge variant="default" className="hidden sm:inline-flex text-xs font-medium shrink-0">
+                                Selected
+                              </Badge>
+                            </>
                           )}
                         </div>
                       ))}

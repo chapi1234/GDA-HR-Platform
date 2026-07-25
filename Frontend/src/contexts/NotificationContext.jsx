@@ -68,7 +68,9 @@ function mapPersonal(n) {
           ? "/payslips"
           : kind === "chat_message"
             ? n.href || "/chat"
-            : n.href || "/salary";
+            : kind === "leave_reviewed"
+              ? "/leave-requests"
+              : n.href || "/salary";
   return {
     id: String(n._id || n.id),
     title: n.title,
@@ -85,7 +87,9 @@ function mapPersonal(n) {
             ? "Payslip"
             : kind === "chat_message"
               ? "Chat"
-              : "Personal",
+              : kind === "leave_reviewed"
+                ? "Leave"
+                : "Personal",
     createdAt: n.createdAt,
     readAt: n.readAt || null,
   };

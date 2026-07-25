@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Button } from '../ui/button';
@@ -14,7 +14,6 @@ import {
 } from '../ui/dropdown-menu';
 import { Badge } from '../ui/badge';
 import {
-  Bell,
   Settings,
   User,
   LogOut,
@@ -27,17 +26,18 @@ import {
 import logo from '../../assets/download.jpg';
 import { getNavigationItems } from './navItems';
 import NotificationBell from './NotificationBell';
+import { unitLeaf } from '../../utils/orgPath';
 
 export const Header = () => {
   const auth = useAuth();
   const { user, logout, roleLabel, canManage } = auth;
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const getDepartmentName = (dept) => {
     if (!dept) return '';
-    // don't show raw ObjectId; treat 24-char hex as id
     if (typeof dept === 'string') {
       if (/^[0-9a-fA-F]{24}$/.test(dept)) return '';
       return dept;
@@ -65,16 +65,35 @@ export const Header = () => {
     if (typeof dep === 'string') {
       (async () => {
         try {
-          const res = await axios.get(`${API_BASE}/api/departments/${dep}`, { headers: { Authorization: `Bearer ${token}` } });
+          const res = await axios.get(`${API_BASE}/api/departments/${dep}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
           if (!mounted) return;
           setDeptName(res.data?.data?.name || '');
-        } catch (err) {
+        } catch {
           // ignore
         }
       })();
     }
-    return () => { mounted = false };
+    return () => {
+      mounted = false;
+    };
   }, [user, API_BASE, token]);
+
+  // Close drawer when route changes or viewport reaches desktop sidebar
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const onResize = () => {
+      if (window.matchMedia('(min-width: 1024px)').matches) {
+        setMobileMenuOpen(false);
+      }
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const toggleTheme = () => {
     if (theme === 'light') setTheme('dark');
@@ -102,28 +121,29 @@ export const Header = () => {
   const navigationItems = getNavigationItems(auth);
 
   return (
-    <header className="sticky top-0 z-50 lg:hidden bg-background border-b border-border">
-      <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between h-16">
-          {/* Logo */}
+    <header className="sticky top-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-border">
+      <div className="container mx-auto px-3 sm:px-4">
+        <div className="flex items-center justify-between h-14 sm:h-16 gap-2">
           <Link
             to="/dashboard"
-            className="flex items-center space-x-3 hover:opacity-80 transition-opacity"
+            className="flex items-center space-x-2 sm:space-x-3 min-w-0 hover:opacity-80 transition-opacity"
           >
-            <div className="w-8 h-8 bg-gradient-primary rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 shrink-0 bg-gradient-primary rounded-lg flex items-center justify-center overflow-hidden">
               <img src={logo} alt="GammoDA Logo" className="w-8 h-8 object-cover" />
             </div>
-            <div>
-              <h1 className="font-bold text-xl text-foreground">GammoDA</h1>
-              <p className="text-xs text-muted-foreground -mt-1">HRM System</p>
+            <div className="min-w-0">
+              <h1 className="font-bold text-lg sm:text-xl text-foreground truncate">GammoDA</h1>
+              <p className="text-xs text-muted-foreground -mt-1 hidden xs:block sm:block">
+                HRM System
+              </p>
             </div>
           </Link>
 
-          {/* User & Menu */}
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             <Button
               variant="ghost"
-              size="sm"
+              size="icon"
+              className="h-9 w-9"
               onClick={toggleTheme}
               title={`Current theme: ${theme}`}
             >
@@ -134,16 +154,23 @@ export const Header = () => {
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="flex items-center space-x-2 hover:bg-accent">
+                <Button
+                  variant="ghost"
+                  className="flex items-center gap-2 px-1.5 sm:px-2 hover:bg-accent"
+                >
                   <Avatar className="w-8 h-8">
                     <AvatarImage src={user?.avatar} alt={user?.name} />
                     <AvatarFallback className="bg-primary text-primary-foreground">
                       {user?.name?.split(' ').map((n) => n[0]).join('')}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="hidden md:block text-left">
-                    <p className="text-sm font-medium">{user?.name}</p>
-                    <Badge variant={canManage ? 'default' : 'secondary'} className="text-xs">
+                  {/* Show name from tablet widths up; phones stay avatar-only */}
+                  <div className="hidden sm:block text-left max-w-[120px] md:max-w-[160px]">
+                    <p className="text-sm font-medium truncate">{user?.name}</p>
+                    <Badge
+                      variant={canManage ? 'default' : 'secondary'}
+                      className="text-xs"
+                    >
                       {roleLabel}
                     </Badge>
                   </div>
@@ -154,7 +181,10 @@ export const Header = () => {
                   <p className="text-sm font-medium">{user?.name}</p>
                   <p className="text-xs text-muted-foreground">{user?.email}</p>
                   <Badge variant="secondary" className="text-xs mt-1">
-                    {user?.unitPath || deptName || getDepartmentName(user?.department) || roleLabel}
+                    {unitLeaf(user?.unitPath) ||
+                      deptName ||
+                      getDepartmentName(user?.department) ||
+                      roleLabel}
                   </Badge>
                 </div>
                 <DropdownMenuSeparator />
@@ -178,38 +208,57 @@ export const Header = () => {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Mobile Menu */}
+            {/* Always visible below lg — was md:hidden which hid it on tablets */}
             <Button
               variant="ghost"
-              size="sm"
-              className="md:hidden"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              size="icon"
+              className="h-9 w-9"
+              aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={mobileMenuOpen}
+              onClick={() => setMobileMenuOpen((open) => !open)}
             >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {mobileMenuOpen ? (
+                <X className="w-5 h-5 transition-transform duration-200" />
+              ) : (
+                <Menu className="w-5 h-5 transition-transform duration-200" />
+              )}
             </Button>
           </div>
         </div>
 
-        {mobileMenuOpen && (
-          <div className="py-4 border-t animate-fade-in">
-            <nav className="flex flex-col space-y-2">
+        <div
+          className={`grid transition-[grid-template-rows] duration-300 ease-out ${
+            mobileMenuOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+          }`}
+        >
+          <div className="overflow-hidden">
+            <nav
+              className={`flex flex-col gap-1 py-3 border-t max-h-[min(70vh,32rem)] overflow-y-auto transition-opacity duration-300 ${
+                mobileMenuOpen ? 'opacity-100' : 'opacity-0'
+              }`}
+            >
               {navigationItems.map((item) => {
                 const Icon = item.icon;
+                const active = location.pathname === item.href;
                 return (
                   <Link
                     key={item.href}
                     to={item.href}
-                    className="flex items-center space-x-3 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-primary hover:bg-accent transition-all duration-200"
+                    className={`flex items-center space-x-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors duration-200 ${
+                      active
+                        ? 'bg-accent text-primary'
+                        : 'text-muted-foreground hover:text-primary hover:bg-accent/80'
+                    }`}
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    <Icon className="w-4 h-4" />
+                    <Icon className="w-4 h-4 shrink-0" />
                     <span>{item.label}</span>
                   </Link>
                 );
               })}
             </nav>
           </div>
-        )}
+        </div>
       </div>
     </header>
   );

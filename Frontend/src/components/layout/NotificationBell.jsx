@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Bell, Megaphone, CheckCheck, DollarSign, Wallet, MessageSquare } from "lucide-react";
+import { Bell, Megaphone, CheckCheck, DollarSign, Wallet, MessageSquare, Calendar, Laptop } from "lucide-react";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import {
@@ -34,6 +34,9 @@ function ItemIcon({ item, unread }) {
   if (item.kind === "salary_advance") return <Wallet className={cls} />;
   if (item.kind === "payroll_created") return <DollarSign className={cls} />;
   if (item.kind === "chat_message") return <MessageSquare className={cls} />;
+  if (item.kind === "leave_reviewed") return <Calendar className={cls} />;
+  if (item.kind === "device_assignment" || item.kind === "device_return_due")
+    return <Laptop className={cls} />;
   return <Megaphone className={cls} />;
 }
 

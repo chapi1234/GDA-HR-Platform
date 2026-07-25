@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { toast } from "react-toastify";
 import WorkHistoryFields from "../components/org/WorkHistoryFields";
+import { unitLeaf } from "../utils/orgPath";
 
 const Profile = () => {
 
@@ -390,7 +391,7 @@ const Profile = () => {
               <div className="flex-1">
                 <h2 className="text-2xl font-bold">{user?.name}</h2>
                 <p className="text-muted-foreground">
-                  {user?.position} • {user?.unitPath || deptName || getDepartmentName(user?.department) || "—"}
+                  {user?.position} • {unitLeaf(user?.unitPath) || deptName || getDepartmentName(user?.department) || "—"}
                 </p>
                 <div className="flex items-center space-x-2 mt-2">
                   <Badge variant="secondary">
@@ -582,12 +583,12 @@ const Profile = () => {
                     <Label htmlFor="department">Unit / Sector</Label>
                     <Input
                       id="department"
-                      value={user?.unitPath || profileData.department || ""}
+                      value={unitLeaf(user?.unitPath) || profileData.department || ""}
                       disabled
                       className="bg-muted"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Sector / sub-sector / unit assignment (managed by HR)
+                      Your assigned unit (managed by HR)
                     </p>
                   </div>
                   <div className="space-y-2">

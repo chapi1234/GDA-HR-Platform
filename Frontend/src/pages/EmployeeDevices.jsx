@@ -7,7 +7,7 @@ import axios from 'axios';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 import {
-  Laptop, Tablet, Smartphone, Monitor, Keyboard, Mouse,
+  Laptop, Tablet, Smartphone, Monitor, Keyboard, Mouse, Camera, Bike,
   Calendar, MapPin, User, Clock
 } from 'lucide-react';
 import { useClientPagination } from '../hooks/useClientPagination';
@@ -38,7 +38,7 @@ const EmployeeDevices = () => {
   const [loading, setLoading] = useState(false);
 
   const getDeviceIcon = (type) => {
-    switch (type) {
+    switch (String(type || '').toLowerCase()) {
       case 'laptop':
         return Laptop;
       case 'tablet':
@@ -47,6 +47,10 @@ const EmployeeDevices = () => {
         return Smartphone;
       case 'monitor':
         return Monitor;
+      case 'camera':
+        return Camera;
+      case 'motorcycle':
+        return Bike;
       case 'accessory':
         return Keyboard;
       default:
@@ -90,10 +94,11 @@ const EmployeeDevices = () => {
     const model = d.model || '';
     const serialNumber = d.serialNumber || d.serial || '';
     const assignedDate = d.assignedDate || d.assignedAt || d.assignedOn || d.assigned || null;
+    const returnDueDate = d.returnDueDate || null;
     const status = d.status || 'active';
     const location = d.location || '';
     const condition = d.condition || 'good';
-    return { id, name, type, model, serialNumber, assignedDate, status, location, condition, raw: d };
+    return { id, name, type, model, serialNumber, assignedDate, returnDueDate, status, location, condition, raw: d };
   };
 
   useEffect(() => {
@@ -230,7 +235,7 @@ const EmployeeDevices = () => {
                     <div>
                       <h4 className="font-semibold text-lg">{device.name}</h4>
                       <p className="text-muted-foreground">{device.model}</p>
-                      <div className="flex items-center space-x-4 mt-2 text-sm text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
                         <div className="flex items-center space-x-1">
                           <Calendar className="w-4 h-4" />
                           <span>Assigned: {new Date(device.assignedDate).toLocaleDateString()}</span>
@@ -239,6 +244,21 @@ const EmployeeDevices = () => {
                           <MapPin className="w-4 h-4" />
                           <span>{device.location}</span>
                         </div>
+                        {device.returnDueDate && (
+                          <div
+                            className={`flex items-center space-x-1 font-medium ${
+                              new Date(device.returnDueDate) < new Date()
+                                ? 'text-destructive'
+                                : 'text-amber-600 dark:text-amber-400'
+                            }`}
+                          >
+                            <Clock className="w-4 h-4" />
+                            <span>
+                              Return by:{' '}
+                              {new Date(device.returnDueDate).toLocaleDateString()}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

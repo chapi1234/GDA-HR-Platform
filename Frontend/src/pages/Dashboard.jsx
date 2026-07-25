@@ -18,6 +18,8 @@ import {
   Users, UserCheck, DollarSign, Calendar, TrendingUp, TrendingDown,
   Clock, Building2, Bell, Target, Award, Activity
 } from 'lucide-react';
+import { useClientPagination } from '../hooks/useClientPagination';
+import ListPagination from '../components/ListPagination';
 const API_URL = import.meta.env.VITE_API_URL;
 
 /** Match Salary page: only approved/paid nets count toward payroll totals */
@@ -37,6 +39,103 @@ function formatEtb(v) {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   })} ETB`;
+}
+
+function currentMonthKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function previousMonthKey(key = currentMonthKey()) {
+  const [y, m] = String(key || "").split("-").map(Number);
+  if (!y || !m) return null;
+  const d = new Date(y, m - 2, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabelFromKey(key) {
+  const [y, m] = String(key || "").split("-").map(Number);
+  if (!y || !m) return key || "";
+  return new Date(y, m - 1, 1).toLocaleString(undefined, {
+    month: "short",
+    year: "numeric",
+  });
+}
+
+/** Inclusive leave days that fall inside calendar month YYYY-MM. */
+function leaveDaysInMonth(leave, monthKey) {
+  const [y, m] = String(monthKey || "").split("-").map(Number);
+  if (!y || !m) return Number(leave?.days) || 0;
+  const start = new Date(leave.startDate);
+  const end = new Date(leave.endDate);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+    return 0;
+  }
+  const monthStart = new Date(y, m - 1, 1, 0, 0, 0, 0);
+  const monthEnd = new Date(y, m, 0, 23, 59, 59, 999);
+  const from = start > monthStart ? start : monthStart;
+  const to = end < monthEnd ? end : monthEnd;
+  if (to < from) return 0;
+  const fromDay = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const toDay = new Date(to.getFullYear(), to.getMonth(), to.getDate());
+  return Math.round((toDay - fromDay) / (1000 * 60 * 60 * 24)) + 1;
+}
+
+/** Build a real delta for StatCard. Returns { change, trend }. */
+function buildDelta(current, previous, { decimals = 0, suffix = "", invertGood = false } = {}) {
+  if (current == null || previous == null) {
+    return { change: null, trend: "neutral" };
+  }
+  const cur = Number(current);
+  const prev = Number(previous);
+  if (Number.isNaN(cur) || Number.isNaN(prev)) {
+    return { change: null, trend: "neutral" };
+  }
+  const diff = cur - prev;
+  const threshold = decimals > 0 ? 0.05 : 0.5;
+  if (Math.abs(diff) < threshold) {
+    return { change: `0${suffix}`, trend: "neutral" };
+  }
+  const sign = diff > 0 ? "+" : "";
+  const formatted = `${sign}${decimals > 0 ? diff.toFixed(decimals) : Math.round(diff)}${suffix}`;
+  let trend = "neutral";
+  if (diff > 0) trend = invertGood ? "down" : "up";
+  if (diff < 0) trend = invertGood ? "up" : "down";
+  return { change: formatted, trend };
+}
+
+function buildPercentDelta(current, previous, { invertGood = false } = {}) {
+  if (current == null || previous == null) {
+    return { change: null, trend: "neutral" };
+  }
+  const cur = Number(current);
+  const prev = Number(previous);
+  if (Number.isNaN(cur) || Number.isNaN(prev)) {
+    return { change: null, trend: "neutral" };
+  }
+  if (prev === 0) {
+    if (cur === 0) return { change: "0%", trend: "neutral" };
+    return { change: "+100%", trend: invertGood ? "down" : "up" };
+  }
+  const pct = ((cur - prev) / Math.abs(prev)) * 100;
+  if (Math.abs(pct) < 0.5) return { change: "0%", trend: "neutral" };
+  const sign = pct > 0 ? "+" : "";
+  return {
+    change: `${sign}${Math.round(pct)}%`,
+    trend: pct > 0 ? (invertGood ? "down" : "up") : invertGood ? "up" : "down",
+  };
+}
+
+function localYmd(d = new Date()) {
+  const dt = new Date(d);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(
+    dt.getDate()
+  ).padStart(2, "0")}`;
+}
+
+/** Employment status only — leave requests do not change this. */
+function isActiveEmployee(emp) {
+  return String(emp?.status || "active").toLowerCase() === "active";
 }
 
 /** Org-tree path only — never legacy Department names */
@@ -292,17 +391,33 @@ const Dashboard = () => {
   useEffect(() => {
     fetchUpcoming();
     fetchActivities();
-    // fetch today's attendance stats
+    // fetch today's attendance stats (+ vs yesterday)
     const fetchStats = async () => {
       if (!token) return;
       try {
-        const res = await axios.get(`${API_BASE}/api/attendance/stats`, { headers: { Authorization: `Bearer ${token}` } });
-        if (res.data && res.data.stats) {
-          // Treat 'late' as present for dashboard reporting
-          const s = res.data.stats;
-          const presentWithLate = (Number(s.present) || 0) + (Number(s.late) || 0);
-          setAttendanceStats({ ...s, present: presentWithLate });
-        }
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const ymdYesterday = localYmd(yesterday);
+        const headers = { Authorization: `Bearer ${token}` };
+
+        const [todayRes, yRes] = await Promise.all([
+          axios.get(`${API_BASE}/api/attendance/stats`, { headers }),
+          axios.get(`${API_BASE}/api/attendance/stats`, {
+            params: { date: ymdYesterday },
+            headers,
+          }),
+        ]);
+
+        const s = todayRes.data?.stats || {};
+        const y = yRes.data?.stats || {};
+        const presentToday = (Number(s.present) || 0) + (Number(s.late) || 0);
+        const absentToday = Number(s.absent) || 0;
+        const presentYday = (Number(y.present) || 0) + (Number(y.late) || 0);
+        const absentYday = Number(y.absent) || 0;
+
+        setAttendanceStats({ ...s, present: presentToday, absent: absentToday });
+        setPresentMoM(buildDelta(presentToday, presentYday));
+        setAbsentMoM(buildDelta(absentToday, absentYday, { invertGood: true }));
       } catch (err) {
         console.error('Failed to load attendance stats', err);
       }
@@ -314,7 +429,8 @@ const Dashboard = () => {
       try {
         const res = await axios.get(`${API_BASE}/api/employees`, { headers: { Authorization: `Bearer ${token}` } });
         const list = Array.isArray(res.data?.data) ? res.data.data : [];
-        setTotalEmployees(list.length);
+        // Active employment status only (pending leave does not make someone inactive)
+        setTotalEmployees(list.filter(isActiveEmployee).length);
       } catch (err) {
         console.error('Failed to load total employees', err);
       }
@@ -345,14 +461,28 @@ const Dashboard = () => {
   });
 
   const [payrollThisMonth, setPayrollThisMonth] = useState(null);
+  const [payrollMoM, setPayrollMoM] = useState({ change: null, trend: "neutral" });
   const [pendingRequestsCount, setPendingRequestsCount] = useState(null);
+  const [presentMoM, setPresentMoM] = useState({ change: null, trend: "neutral" });
+  const [absentMoM, setAbsentMoM] = useState({ change: null, trend: "neutral" });
   // Employee personal stats
   const [hoursThisWeek, setHoursThisWeek] = useState(null);
+  const [hoursWoW, setHoursWoW] = useState({ change: null, trend: "neutral" });
   const [attendanceRateUser, setAttendanceRateUser] = useState(null);
+  const [attendanceRateWoW, setAttendanceRateWoW] = useState({ change: null, trend: "neutral" });
   const [currentSalary, setCurrentSalary] = useState(null);
+  const [netPayDelta, setNetPayDelta] = useState({ change: null, trend: "neutral" });
   const [leaveBalanceDays, setLeaveBalanceDays] = useState(null);
+  const [leaveMoM, setLeaveMoM] = useState({ change: null, trend: "neutral" });
+  const [leavePendingMine, setLeavePendingMine] = useState(null);
   const [salaryDebug, setSalaryDebug] = useState(null);
   const [showSalaryDebug, setShowSalaryDebug] = useState(false);
+
+  const thisMonthKey = useMemo(() => currentMonthKey(), []);
+  const thisMonthLabel = useMemo(
+    () => monthLabelFromKey(thisMonthKey),
+    [thisMonthKey]
+  );
 
   const distributionOptions = distributionLevelOptions(mode.id);
   const distributionBuilt = useMemo(
@@ -427,7 +557,7 @@ const Dashboard = () => {
           axios.get(`${API_BASE}/api/sectors/tree`, { headers }),
         ]);
         const employees = Array.isArray(empRes.data?.data) ? empRes.data.data : [];
-        setScopedEmployees(employees);
+        setScopedEmployees(employees.filter(isActiveEmployee));
         setSectorById(indexSectorNodes(sectorRes.data?.data || []));
       } catch (err) {
         console.error('Failed to load department data', err);
@@ -450,12 +580,19 @@ const Dashboard = () => {
 
         const now = new Date();
         const thisMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+        const lastMonthKey = previousMonthKey(thisMonthKey);
         const monthTotal = countable.reduce((sum, p) => {
           return payrollMonthKeyOf(p) === thisMonthKey
             ? sum + (Number(p.netSalary) || 0)
             : sum;
         }, 0);
+        const lastMonthTotal = countable.reduce((sum, p) => {
+          return payrollMonthKeyOf(p) === lastMonthKey
+            ? sum + (Number(p.netSalary) || 0)
+            : sum;
+        }, 0);
         setPayrollThisMonth(monthTotal);
+        setPayrollMoM(buildPercentDelta(monthTotal, lastMonthTotal));
 
         const monthsMap = new Map();
         for (let i = 5; i >= 0; i--) {
@@ -482,12 +619,18 @@ const Dashboard = () => {
         // Personal dashboard: prefer latest approved/paid net over static employee.salary
         if (!manageView && countable.length) {
           const sorted = [...countable].sort((a, b) => {
-            const da = new Date(a.payDate || 0).getTime();
-            const db = new Date(b.payDate || 0).getTime();
+            const da = new Date(a.payDate || a.payrollMonth || 0).getTime();
+            const db = new Date(b.payDate || b.payrollMonth || 0).getTime();
             return db - da;
           });
           const latestNet = Number(sorted[0]?.netSalary);
+          const prevNet = sorted[1] != null ? Number(sorted[1].netSalary) : null;
           if (!Number.isNaN(latestNet)) setCurrentSalary(latestNet);
+          if (!Number.isNaN(latestNet) && prevNet != null && !Number.isNaN(prevNet)) {
+            setNetPayDelta(buildPercentDelta(latestNet, prevNet));
+          } else {
+            setNetPayDelta({ change: null, trend: "neutral" });
+          }
         }
       } catch (err) {
         console.error("Failed to load payrolls", err);
@@ -495,15 +638,18 @@ const Dashboard = () => {
     };
 
     const fetchPendingLeaveRequests = async () => {
-      if (!token) return;
+      if (!token || !manageView) return;
       try {
-        // backend route is /api/leaves
-        const leaveRes = await axios.get(`${API_BASE}/api/leave`, { headers: { Authorization: `Bearer ${token}` } });
+        // All pending in scope — still needs review regardless of leave month
+        const leaveRes = await axios.get(`${API_BASE}/api/leave`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         const leaves = Array.isArray(leaveRes.data?.data) ? leaveRes.data.data : [];
-        const pending = leaves.filter(l => l.status === 'pending').length;
+        const pending = leaves.filter((l) => l.status === "pending").length;
         setPendingRequestsCount(pending);
       } catch (err) {
-        console.error('Failed to load leave requests', err);
+        console.error("Failed to load leave requests", err);
+        setPendingRequestsCount(0);
       }
     };
 
@@ -515,11 +661,6 @@ const Dashboard = () => {
   // Employee-specific data (hours this week, attendance rate, salary, leave balance)
   useEffect(() => {
     if (!token || !user || manageView) return;
-
-    const isoDate = (d) => {
-      const dd = new Date(d);
-      return new Date(dd.getTime() - dd.getTimezoneOffset()*60000).toISOString().slice(0,10);
-    };
 
     const parseWorkingMinutes = (s) => {
       if (!s || typeof s !== 'string') return 0;
@@ -543,11 +684,35 @@ const Dashboard = () => {
       return { start, end };
     };
 
+    const weekStatsFromRecords = (records, start, endCap) => {
+      const weekRecords = records.filter((r) => {
+        const d = new Date(r.date);
+        return d >= start && d <= endCap;
+      });
+      let totalDays = 0;
+      const iter = new Date(start);
+      while (iter <= endCap) {
+        const wd = iter.getDay();
+        if (wd >= 1 && wd <= 5) totalDays += 1;
+        iter.setDate(iter.getDate() + 1);
+      }
+      const daysPresent = weekRecords.filter(
+        (r) => r.status === "present" || r.status === "late"
+      ).length;
+      const totalMinutes = weekRecords.reduce(
+        (acc, r) => acc + parseWorkingMinutes(r.workingHours || r.hours),
+        0
+      );
+      const hours = totalMinutes / 60;
+      const rate = totalDays > 0 ? Math.round((daysPresent / totalDays) * 100) : 0;
+      return { hours, rate };
+    };
+
     const fetchEmployeeStats = async () => {
       try {
         // attendance history for user
         const attRes = await axios.get(`${API_BASE}/api/attendance/me`, {
-          params: { limit: 30 },
+          params: { limit: 60 },
           headers: { Authorization: `Bearer ${token}` },
         });
         const records = Array.isArray(attRes.data?.data) ? attRes.data.data : [];
@@ -555,28 +720,19 @@ const Dashboard = () => {
         const today = new Date();
         const { start, end } = getWeekBounds(today);
         const capEnd = new Date(Math.min(end.getTime(), today.getTime()));
+        const thisWeek = weekStatsFromRecords(records, start, capEnd);
 
-        // Count working weekdays between start..capEnd
-        let totalDays = 0;
-        const iter = new Date(start);
-        while (iter <= capEnd) {
-          const wd = iter.getDay();
-          if (wd >= 1 && wd <= 5) totalDays += 1;
-          iter.setDate(iter.getDate() + 1);
-        }
+        const lastWeekStart = new Date(start);
+        lastWeekStart.setDate(start.getDate() - 7);
+        const lastWeekEnd = new Date(start);
+        lastWeekEnd.setDate(start.getDate() - 1);
+        lastWeekEnd.setHours(23, 59, 59, 999);
+        const lastWeek = weekStatsFromRecords(records, lastWeekStart, lastWeekEnd);
 
-        // Filter records within week bounds
-        const weekRecords = records.filter(r => {
-          const d = new Date(r.date);
-          return d >= start && d <= capEnd;
-        });
-
-        const daysPresent = weekRecords.filter(r => (r.status === 'present' || r.status === 'late')).length;
-        const totalMinutes = weekRecords.reduce((acc, r) => acc + parseWorkingMinutes(r.workingHours || r.hours), 0);
-
-        setHoursThisWeek((totalMinutes / 60).toFixed(1));
-        const rate = totalDays > 0 ? Math.round((daysPresent / totalDays) * 100) : 0;
-        setAttendanceRateUser(`${rate}%`);
+        setHoursThisWeek(thisWeek.hours.toFixed(1));
+        setAttendanceRateUser(`${thisWeek.rate}%`);
+        setHoursWoW(buildDelta(thisWeek.hours, lastWeek.hours, { decimals: 1 }));
+        setAttendanceRateWoW(buildDelta(thisWeek.rate, lastWeek.rate, { suffix: "%" }));
 
         // employee details for salary (defensive: API may return different shapes)
         try {
@@ -608,8 +764,6 @@ const Dashboard = () => {
             }
             if (salaryVal == null) {
               console.debug('salary not found for user; empRes / user:', empRes.data, user);
-              // optionally notify user in UI for easier debugging
-              // toast.info('Employee salary not found (check server data)');
             }
             setCurrentSalary((prev) =>
               prev != null ? prev : salaryVal != null ? Number(salaryVal) : null
@@ -626,15 +780,32 @@ const Dashboard = () => {
           );
         }
 
-        // leave balance: sum approved leave days for this user
+        // Approved leave days this month vs last month
         try {
-          const leaveRes = await axios.get(`${API_BASE}/api/leave`, { headers: { Authorization: `Bearer ${token}` } });
-          const leaves = Array.isArray(leaveRes.data?.data) ? leaveRes.data.data : [];
-          const approvedDays = leaves.filter(l => l.status === 'approved').reduce((s, l) => s + (Number(l.days) || 0), 0);
+          const monthKey = thisMonthKey;
+          const lastKey = previousMonthKey(monthKey);
+          const headers = { Authorization: `Bearer ${token}` };
+          const [thisRes, lastRes] = await Promise.all([
+            axios.get(`${API_BASE}/api/leave`, { headers, params: { month: monthKey } }),
+            axios.get(`${API_BASE}/api/leave`, { headers, params: { month: lastKey } }),
+          ]);
+          const thisLeaves = Array.isArray(thisRes.data?.data) ? thisRes.data.data : [];
+          const lastLeaves = Array.isArray(lastRes.data?.data) ? lastRes.data.data : [];
+          const approvedDays = thisLeaves
+            .filter((l) => l.status === "approved")
+            .reduce((s, l) => s + leaveDaysInMonth(l, monthKey), 0);
+          const lastApprovedDays = lastLeaves
+            .filter((l) => l.status === "approved")
+            .reduce((s, l) => s + leaveDaysInMonth(l, lastKey), 0);
+          const pendingMine = thisLeaves.filter((l) => l.status === "pending").length;
           setLeaveBalanceDays(approvedDays);
+          setLeavePendingMine(pendingMine);
+          setLeaveMoM(buildDelta(approvedDays, lastApprovedDays));
         } catch (e) {
-          console.error('Failed to fetch leaves for employee', e);
+          console.error("Failed to fetch leaves for employee", e);
           setLeaveBalanceDays(0);
+          setLeavePendingMine(0);
+          setLeaveMoM({ change: null, trend: "neutral" });
         }
       } catch (err) {
         console.error('Failed to load employee attendance', err);
@@ -642,34 +813,36 @@ const Dashboard = () => {
     };
 
     fetchEmployeeStats();
-  }, [token, user, manageView]);
+  }, [token, user, manageView, thisMonthKey]);
 
   const [activities, setActivities] = useState([]);
   const [loadingActivities, setLoadingActivities] = useState(false);
 
-  const fallbackRecentActivities = [
-    { id: 1, user: 'leul Gedion', action: 'submitted leave request', time: '2 hours ago', type: 'leave' },
-    { id: 2, user: 'Abebe Kebede', action: 'marked attendance', time: '3 hours ago', type: 'attendance' },
-    { id: 3, user: 'Habtumu Teshome', action: 'updated profile', time: '5 hours ago', type: 'profile' },
-    { id: 4, user: 'Jossy Chencha', action: 'applied for Engineering role', time: '1 day ago', type: 'recruitment' },
-  ];
-
-  const fetchActivities = async (limit = manageView ? 6 : 8) => {
+  const fetchActivities = async (limit = 36) => {
     if (!token) return;
     setLoadingActivities(true);
     try {
-      const params = { limit };
-      // If not management view, only fetch my activities
+      const params = { limit, days: 7 };
+      // Employees: own feed. Managers+: backend scopes by org unit / role.
       if (!manageView) params.mine = true;
-      const res = await axios.get(`${API_BASE}/api/activities`, { params, headers: { Authorization: `Bearer ${token}` } });
+      const res = await axios.get(`${API_BASE}/api/activities`, {
+        params,
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const list = Array.isArray(res.data?.data) ? res.data.data : [];
       setActivities(list);
     } catch (err) {
       console.error('Failed to load activities', err);
+      setActivities([]);
     } finally {
       setLoadingActivities(false);
     }
   };
+
+  const activityPaging = useClientPagination(activities, 6, [
+    activities.length,
+    manageView,
+  ]);
 
   // upcomingEvents now comes from API
 
@@ -689,48 +862,55 @@ const Dashboard = () => {
           <StatCard
             title={
               mode.id === 'manager' || mode.id === 'unit_manager'
-                ? 'Team Size'
-                : 'Total Employees'
+                ? 'Active Team Size'
+                : 'Active Employees'
             }
             value={totalEmployees !== null ? String(totalEmployees) : '0'}
-            change="+0"
+            change="In your scope"
+            showVsLastMonth={false}
             icon={Users}
-            trend="up"
+            trend="neutral"
           />
           <StatCard
             title="Present Today"
             value={String(attendanceStats.present)}
-            change="+0"
+            change={presentMoM.change}
+            changeLabel="vs yesterday"
+            showVsLastMonth={false}
             icon={UserCheck}
-            trend="up"
+            trend={presentMoM.trend}
           />
           <StatCard
             title="Absent Today"
             value={String(attendanceStats.absent)}
-            change="-2"
+            change={absentMoM.change}
+            changeLabel="vs yesterday"
+            showVsLastMonth={false}
             icon={Users}
-            trend="down"
+            trend={absentMoM.trend}
           />
           {mode.showPayrollKpi && (
             <StatCard
               title="Net Payroll This Month"
               value={payrollThisMonth !== null ? formatEtb(payrollThisMonth) : formatEtb(0)}
-              change="Approved / paid"
+              change={payrollMoM.change || "Approved / paid"}
+              changeLabel={payrollMoM.change ? "vs last month" : null}
               showVsLastMonth={false}
               icon={DollarSign}
-              trend="up"
+              trend={payrollMoM.change ? payrollMoM.trend : "neutral"}
             />
           )}
           <StatCard
             title={
               mode.id === 'manager' || mode.id === 'unit_manager'
                 ? 'Pending Leave (Team)'
-                : 'Pending Requests'
+                : 'Pending Leave'
             }
             value={pendingRequestsCount !== null ? String(pendingRequestsCount) : '0'}
-            change="-3"
+            change="Awaiting review"
+            showVsLastMonth={false}
             icon={Calendar}
-            trend="down"
+            trend="neutral"
           />
         </div>
         {/* Charts Section */}
@@ -863,11 +1043,23 @@ const Dashboard = () => {
                 <Bell className="w-5 h-5 text-primary" />
                 <span>Recent Activities</span>
               </CardTitle>
-              <CardDescription>Latest activities in your scope</CardDescription>
+              <CardDescription>
+                {mode.id === 'manager' || mode.id === 'unit_manager'
+                  ? 'Last 7 days from your team'
+                  : mode.id === 'sector_lead'
+                    ? 'Last 7 days in your sector'
+                    : 'Last 7 days across the organization'}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {(loadingActivities ? fallbackRecentActivities : (activities.length ? activities : fallbackRecentActivities)).map((activity) => (
+                {loadingActivities && (
+                  <p className="text-sm text-muted-foreground">Loading activity…</p>
+                )}
+                {!loadingActivities && activities.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No recent activity in your scope yet</p>
+                )}
+                {!loadingActivities && activityPaging.pagedItems.map((activity) => (
                   <div key={activity.id} className="flex items-center space-x-3 p-3 rounded-lg hover:bg-accent transition-colors">
                     <Avatar className="w-8 h-8">
                       <AvatarImage src={activity.actorAvatar || `https://ui-avatars.com/api/?name=${activity.actorName || activity.user}&background=3b82f6&color=fff`} />
@@ -889,6 +1081,22 @@ const Dashboard = () => {
                   </div>
                 ))}
               </div>
+              {activityPaging.showControls && (
+                <ListPagination
+                  className="mt-4"
+                  page={activityPaging.page}
+                  totalPages={activityPaging.totalPages}
+                  hasPrev={activityPaging.hasPrev}
+                  hasNext={activityPaging.hasNext}
+                  rangeLabel={activityPaging.rangeLabel}
+                  onPrev={() => activityPaging.setPage((p) => Math.max(1, p - 1))}
+                  onNext={() =>
+                    activityPaging.setPage((p) =>
+                      Math.min(activityPaging.totalPages, p + 1)
+                    )
+                  }
+                />
+              )}
             </CardContent>
           </Card>
 
@@ -960,26 +1168,43 @@ const Dashboard = () => {
         <StatCard
           title="Hours This Week"
           value={hoursThisWeek !== null ? String(hoursThisWeek) : '--'}
-          change="+2.5"
+          change={hoursWoW.change}
+          changeLabel="vs last week"
+          showVsLastMonth={false}
           icon={Clock}
-          trend="up"
+          trend={hoursWoW.trend}
         />
         <StatCard
           title="Attendance Rate"
           value={attendanceRateUser || '--'}
-          change="+2%"
+          change={attendanceRateWoW.change}
+          changeLabel="vs last week"
+          showVsLastMonth={false}
           icon={UserCheck}
-          trend="up"
+          trend={attendanceRateWoW.trend}
         />
         <StatCard
           title="Latest Net Pay"
           value={currentSalary !== null ? formatEtb(currentSalary) : '--'}
+          change={netPayDelta.change}
+          changeLabel="vs previous pay"
+          showVsLastMonth={false}
           icon={DollarSign}
+          trend={netPayDelta.trend}
         />
         <StatCard
-          title="Leave Balance"
+          title="Approved Leave Days"
           value={leaveBalanceDays !== null ? `${leaveBalanceDays} days` : '--'}
+          change={
+            leaveMoM.change ||
+            (leavePendingMine != null && leavePendingMine > 0
+              ? `${thisMonthLabel} · ${leavePendingMine} pending`
+              : thisMonthLabel)
+          }
+          changeLabel={leaveMoM.change ? "vs last month" : null}
+          showVsLastMonth={false}
           icon={Calendar}
+          trend={leaveMoM.change ? leaveMoM.trend : "neutral"}
         />
       </div>
 
@@ -1051,10 +1276,14 @@ const Dashboard = () => {
               <Activity className="w-5 h-5 text-primary" />
               <span>My Recent Activity</span>
             </CardTitle>
+            <CardDescription>Your activity from the last 7 days</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {(loadingActivities ? [] : activities).slice(0, 5).map((activity) => (
+              {loadingActivities && (
+                <p className="text-sm text-muted-foreground">Loading activity…</p>
+              )}
+              {!loadingActivities && activityPaging.pagedItems.map((activity) => (
                 <div key={activity.id} className="flex items-center space-x-3 p-3 rounded-lg hover:bg-accent transition-colors">
                   <Avatar className="w-8 h-8">
                     <AvatarImage src={activity.actorAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(activity.actorName || activity.user || 'U')}&background=3b82f6&color=fff`} />
@@ -1072,6 +1301,22 @@ const Dashboard = () => {
                 <p className="text-sm text-muted-foreground">No recent activity yet</p>
               )}
             </div>
+            {activityPaging.showControls && (
+              <ListPagination
+                className="mt-4"
+                page={activityPaging.page}
+                totalPages={activityPaging.totalPages}
+                hasPrev={activityPaging.hasPrev}
+                hasNext={activityPaging.hasNext}
+                rangeLabel={activityPaging.rangeLabel}
+                onPrev={() => activityPaging.setPage((p) => Math.max(1, p - 1))}
+                onNext={() =>
+                  activityPaging.setPage((p) =>
+                    Math.min(activityPaging.totalPages, p + 1)
+                  )
+                }
+              />
+            )}
           </CardContent>
         </Card>
       </div>

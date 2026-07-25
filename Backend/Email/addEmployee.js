@@ -45,7 +45,11 @@ export default function getAddEmployeeMailOptions(
       <li>Contact HR if any information above is incorrect.</li>
     </ol>
     <p style="text-align:center;">
-      <a class="button" href="${escapeHtml(portalUrl)}">Open Employee Portal</a>
+      <a class="button" href="${escapeHtml(portalUrl)}" target="_blank" rel="noopener noreferrer">Open Employee Portal</a>
+    </p>
+    <p style="text-align:center; font-size:13px; color:#6b7280;">
+      Or open this link in your browser:<br />
+      <a href="${escapeHtml(portalUrl)}" target="_blank" rel="noopener noreferrer" style="color:#1565c0; word-break:break-all;">${escapeHtml(portalUrl)}</a>
     </p>
     <div class="notice">
       For security, do not share your login credentials with anyone. If you did not expect

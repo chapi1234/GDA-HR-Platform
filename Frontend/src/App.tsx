@@ -51,7 +51,7 @@ const queryClient = new QueryClient();
 
     return (
       <div className="min-h-screen w-full flex flex-col">
-        {/* Header visible only on sm/md */}
+        {/* Mobile / tablet header (sidebar takes over at lg) */}
         <div className="block lg:hidden">
           <Header />
         </div>
@@ -72,14 +72,9 @@ const queryClient = new QueryClient();
   };
 
 const AppRoutes = () => {
-  const { isAuthenticated } = useAuth();
-  
   return (
     <Routes>
-      <Route 
-        path="/auth" 
-        element={isAuthenticated ? <Dashboard /> : <AuthForm />} 
-      />
+      <Route path="/auth" element={<AuthForm />} />
       <Route 
         path="/" 
         element={

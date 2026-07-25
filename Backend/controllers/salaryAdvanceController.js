@@ -3,6 +3,7 @@ import Employee from "../models/Employee.js";
 import { canAccessEmployee, getScopedEmployeeIds } from "../utils/scope.js";
 import { isOrgWide, ROLES } from "../utils/roles.js";
 import { notifySalaryAdvanceRecorded } from "../utils/notifyEmployee.js";
+import { logActivity } from "../utils/logActivity.js";
 
 function actorId(user) {
   return user?._id || user?.id;
@@ -116,6 +117,18 @@ export const createAdvance = async (req, res) => {
       advance: populated || advance,
       preparedByName: req.user?.name || populated?.preparedBy?.name,
     }).catch((err) => console.error("advance notify", err));
+
+    logActivity({
+      actor: empDoc._id,
+      action: "Salary advance recorded",
+      type: "salary_advance",
+      meta: {
+        advanceId: String(advance._id),
+        amount: Number(amount),
+        preparedBy: String(actorId(req.user) || ""),
+        preparedByName: req.user?.name || "",
+      },
+    });
 
     return res.status(201).json({
       status: true,
@@ -249,6 +262,17 @@ export const updateAdvance = async (req, res) => {
     if (req.body.reason !== undefined) advance.reason = req.body.reason;
 
     await advance.save();
+    logActivity({
+      actor: advance.employee,
+      action: "Salary advance updated",
+      type: "salary_advance",
+      meta: {
+        advanceId: String(advance._id),
+        amount: advance.amount,
+        updatedBy: String(actorId(req.user) || ""),
+        updatedByName: req.user?.name || "",
+      },
+    });
     return res.json({
       status: true,
       message: "Advance updated",
@@ -287,6 +311,17 @@ export const cancelAdvance = async (req, res) => {
 
     advance.status = "cancelled";
     await advance.save();
+    logActivity({
+      actor: advance.employee,
+      action: "Salary advance cancelled",
+      type: "salary_advance",
+      meta: {
+        advanceId: String(advance._id),
+        amount: advance.amount,
+        cancelledBy: String(actorId(req.user) || ""),
+        cancelledByName: req.user?.name || "",
+      },
+    });
     return res.json({
       status: true,
       message: "Advance cancelled",

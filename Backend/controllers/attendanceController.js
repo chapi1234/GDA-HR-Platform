@@ -2,8 +2,8 @@ import Attendance from '../models/Attendance.js';
 import Employee from '../models/Employee.js';
 import Department from '../models/Department.js';
 import DailyAttendance from '../models/DailyAttendance.js';
-import Activity from '../models/Activity.js';
 import { canAccessEmployee, employeeScopeFilter, getScopedEmployeeIds } from '../utils/scope.js';
+import { logActivity } from '../utils/logActivity.js';
 
 // Map DB doc to frontend shape used in Attendance.jsx
 const mapRecord = (rec, empDoc) => {
@@ -259,12 +259,12 @@ export const checkIn = async (req, res) => {
     }
     await rec.save();
     // server-side activity log: create an activity for check-in
-    try {
-      const a = new Activity({ actor: userId, action: 'Checked in', type: 'attendance', meta: { date: start.toISOString().slice(0,10), checkIn: actualTime } });
-      await a.save();
-    } catch (ae) {
-      console.error('Failed to create activity for check-in', ae);
-    }
+    logActivity({
+      actor: userId,
+      action: 'Checked in',
+      type: 'attendance',
+      meta: { date: start.toISOString().slice(0,10), checkIn: actualTime },
+    });
     const emp = await Employee.findById(userId).populate({ path: 'department', select: 'name' });
     return res.status(200).json({ status: true, message: 'Checked in', data: mapRecord(rec, emp) });
   } catch (err) {
@@ -288,12 +288,12 @@ export const checkOut = async (req, res) => {
   rec.checkOut = time || currentTime();
   await rec.save();
   // server-side activity log: create an activity for check-out
-  try {
-    const a = new Activity({ actor: userId, action: 'Checked out', type: 'attendance', meta: { date: start.toISOString().slice(0,10), checkOut: rec.checkOut } });
-    await a.save();
-  } catch (ae) {
-    console.error('Failed to create activity for check-out', ae);
-  }
+  logActivity({
+    actor: userId,
+    action: 'Checked out',
+    type: 'attendance',
+    meta: { date: start.toISOString().slice(0,10), checkOut: rec.checkOut },
+  });
   const emp = await Employee.findById(userId).populate({ path: 'department', select: 'name' });
   return res.status(200).json({ status: true, message: 'Checked out', data: mapRecord(rec, emp) });
   } catch (err) {

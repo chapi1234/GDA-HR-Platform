@@ -21,6 +21,7 @@ import {
   assertMonthWritable,
   unpaidLeaveDeduction,
 } from "../utils/payrollOps.js";
+import { logActivity } from "../utils/logActivity.js";
 
 function actorId(user) {
   return user?._id || user?.id;
@@ -264,6 +265,19 @@ export const createPayroll = async (req, res) => {
       payroll: populated || payroll,
       preparedByName: req.user?.name || populated?.preparedBy?.name,
     }).catch((err) => console.error("payroll notify", err));
+
+    logActivity({
+      actor: empDoc._id,
+      action: "Payroll record created",
+      type: "payroll",
+      meta: {
+        payrollId: String(payroll._id),
+        payrollMonth: payroll.payrollMonth || "",
+        netSalary: payroll.netSalary,
+        preparedBy: String(actorId(req.user) || ""),
+        preparedByName: req.user?.name || "",
+      },
+    });
 
     return res.status(201).json({
       status: true,
@@ -587,6 +601,19 @@ export const approvePayroll = async (req, res) => {
       console.error("payslip notify", err);
     }
 
+    logActivity({
+      actor: payroll.employee,
+      action: "Payroll approved",
+      type: "payroll",
+      meta: {
+        payrollId: String(payroll._id),
+        payrollMonth: payroll.payrollMonth || "",
+        netSalary: payroll.netSalary,
+        approvedBy: String(actorId(req.user) || ""),
+        approvedByName: req.user?.name || "",
+      },
+    });
+
     return res.json({
       status: true,
       message: payslip
@@ -641,6 +668,19 @@ export const rejectPayroll = async (req, res) => {
       .populate({ path: "employee", select: "name employeeId" })
       .populate({ path: "preparedBy", select: "name role" })
       .populate({ path: "approvedBy", select: "name role" });
+
+    logActivity({
+      actor: payroll.employee,
+      action: "Payroll rejected",
+      type: "payroll",
+      meta: {
+        payrollId: String(payroll._id),
+        payrollMonth: payroll.payrollMonth || "",
+        reason: payroll.rejectionReason || "",
+        rejectedBy: String(actorId(req.user) || ""),
+        rejectedByName: req.user?.name || "",
+      },
+    });
 
     return res.json({
       status: true,

@@ -4,7 +4,7 @@ import getPayrollCreatedMailOptions from "../Email/payrollCreatedNotify.js";
 import { emitToUser } from "../socket.js";
 import Notification from "../models/Notification.js";
 
-async function persistAndEmit({
+export async function persistAndEmit({
   recipientId,
   kind,
   title,

@@ -27,6 +27,7 @@ import deviceRoutes from "./routes/device.js";
 import sectorRoutes from "./routes/sector.js";
 import chatRoutes from "./routes/chat.js";
 import { initSocket } from "./socket.js";
+import { startDeviceReminderJob } from "./utils/deviceReminders.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -87,6 +88,7 @@ app.use("/api/chat", chatRoutes);
 
 const server = http.createServer(app);
 initSocket(server);
+startDeviceReminderJob();
 
 server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

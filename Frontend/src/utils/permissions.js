@@ -68,7 +68,12 @@ export function buildCapabilities(user) {
     isSuperAdmin || isAdmin || isSectorLead;
   const canManagePayroll = canViewPayrollOps;
   const canRecruit = canManageHrOps;
+  /** Open the Device Management page (view scoped inventory) */
   const canManageDevices = canManageHrOps;
+  /** Create / edit / delete inventory — org-wide roles only */
+  const canManageDeviceInventory = isHR || isAdmin || isSuperAdmin;
+  /** Assign / return / reassign — HR and above incl. sector leads (scoped) */
+  const canAssignDevices = canManageHrOps;
   const canReviewLeave = canManage;
   const canManageTeamAttendance = canManage;
   const canManageOrgStructure =
@@ -99,6 +104,8 @@ export function buildCapabilities(user) {
     payrollReadOnly,
     canRecruit,
     canManageDevices,
+    canManageDeviceInventory,
+    canAssignDevices,
     canReviewLeave,
     canManageTeamAttendance,
     canManageOrgStructure,

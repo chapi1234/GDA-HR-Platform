@@ -14,6 +14,7 @@ import {
 } from "../utils/scope.js";
 import { resolveOrgPlacement } from "../utils/sectorAssign.js";
 import { canAssignOrganizationScope, ROLES } from "../utils/roles.js";
+import { logActivity } from "../utils/logActivity.js";
 
 const toId = (val) => {
   if (!val) return null;
@@ -423,6 +424,22 @@ export const createEmployee = async (req, res) => {
       .populate({ path: "subSectorId", select: "name pathNames level" })
       .populate({ path: "subSubSectorId", select: "name pathNames level" });
 
+    logActivity({
+      actor: user._id,
+      action: "Employee added",
+      type: "employee",
+      meta: {
+        employeeId: user.employeeId || "",
+        employeeName: user.name,
+        role: user.role,
+        sectorId: user.sectorId ? String(user.sectorId) : "",
+        subSectorId: user.subSectorId ? String(user.subSectorId) : "",
+        subSubSectorId: user.subSubSectorId ? String(user.subSubSectorId) : "",
+        addedBy: String(req.user?._id || req.user?.id || ""),
+        addedByName: req.user?.name || "",
+      },
+    });
+
     res.status(201).json({
       status: true,
       message: emailResult.sent
@@ -775,6 +792,55 @@ export const editEmployee = async (req, res) => {
       await recalcDepartmentStats(newDeptId);
     }
 
+    const prevStatus = String(prev.status || "active").toLowerCase();
+    const nextStatus = String(emp.status || "active").toLowerCase();
+    if (prevStatus !== nextStatus) {
+      if (nextStatus === "inactive" || nextStatus === "terminated") {
+        logActivity({
+          actor: emp._id,
+          action:
+            nextStatus === "terminated"
+              ? "Employee terminated"
+              : "Employee deactivated",
+          type: "employee",
+          meta: {
+            employeeId: emp.employeeId || "",
+            employeeName: emp.name,
+            status: nextStatus,
+            sectorId: emp.sectorId ? String(emp.sectorId._id || emp.sectorId) : "",
+            subSectorId: emp.subSectorId
+              ? String(emp.subSectorId._id || emp.subSectorId)
+              : "",
+            subSubSectorId: emp.subSubSectorId
+              ? String(emp.subSubSectorId._id || emp.subSubSectorId)
+              : "",
+            updatedBy: String(req.user?._id || req.user?.id || ""),
+            updatedByName: req.user?.name || "",
+          },
+        });
+      } else if (nextStatus === "active") {
+        logActivity({
+          actor: emp._id,
+          action: "Employee reactivated",
+          type: "employee",
+          meta: {
+            employeeId: emp.employeeId || "",
+            employeeName: emp.name,
+            status: nextStatus,
+            sectorId: emp.sectorId ? String(emp.sectorId._id || emp.sectorId) : "",
+            subSectorId: emp.subSectorId
+              ? String(emp.subSectorId._id || emp.subSectorId)
+              : "",
+            subSubSectorId: emp.subSubSectorId
+              ? String(emp.subSubSectorId._id || emp.subSubSectorId)
+              : "",
+            updatedBy: String(req.user?._id || req.user?.id || ""),
+            updatedByName: req.user?.name || "",
+          },
+        });
+      }
+    }
+
     res.status(200).json({
       status: true,
       message: "Employee updated successfully",
@@ -812,6 +878,34 @@ export const deleteEmployee = async (req, res) => {
     );
 
     await Employee.findByIdAndDelete(id);
+
+    logActivity({
+      actor: req.user?._id || req.user?.id,
+      action: `Employee removed: ${emp.name}`,
+      type: "employee",
+      meta: {
+        employeeId: emp.employeeId || "",
+        employeeName: emp.name,
+        removedId: String(emp._id),
+        sectorId: emp.sectorId?._id
+          ? String(emp.sectorId._id)
+          : emp.sectorId
+            ? String(emp.sectorId)
+            : "",
+        subSectorId: emp.subSectorId?._id
+          ? String(emp.subSectorId._id)
+          : emp.subSectorId
+            ? String(emp.subSectorId)
+            : "",
+        subSubSectorId: emp.subSubSectorId?._id
+          ? String(emp.subSubSectorId._id)
+          : emp.subSubSectorId
+            ? String(emp.subSubSectorId)
+            : "",
+        removedBy: String(req.user?._id || req.user?.id || ""),
+        removedByName: req.user?.name || "",
+      },
+    });
 
     // Decrement department employee count
     if (emp.department?._id) {

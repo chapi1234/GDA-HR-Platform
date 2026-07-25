@@ -48,6 +48,10 @@ export const MANAGER_AND_ABOVE = [
 /** Can manage org structure deletes / org admin tools */
 export const ADMIN_AND_ABOVE = [ROLES.ADMIN, ROLES.SUPERADMIN];
 
+/** Device inventory CRUD (create/edit/delete) — org-wide roles only.
+ *  Sector leads can still view and assign within their scope. */
+export const DEVICE_INVENTORY_ROLES = [ROLES.HR, ROLES.ADMIN, ROLES.SUPERADMIN];
+
 export const PRIVILEGED_ROLES = [
   ROLES.SUPERADMIN,
   ROLES.ADMIN,

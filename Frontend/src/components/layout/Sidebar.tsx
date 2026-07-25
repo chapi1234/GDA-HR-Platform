@@ -27,6 +27,7 @@ import {
 import logo  from '../../assets/download.jpg';
 import { getNavigationItems } from "./navItems"
 import NotificationBell from "./NotificationBell"
+import { unitLeaf } from "../../utils/orgPath"
 
 export const Sidebar = () => {
   const auth = useAuth()
@@ -212,7 +213,7 @@ export const Sidebar = () => {
               <p className="text-sm font-medium">{user?.name}</p>
               <p className="text-xs text-muted-foreground">{user?.email}</p>
               <Badge variant="secondary" className="text-xs mt-1">
-                {user?.unitPath || deptName || getDepartmentName(user?.department) || roleLabel}
+                {unitLeaf(user?.unitPath) || deptName || getDepartmentName(user?.department) || roleLabel}
               </Badge>
             </div>
             <DropdownMenuSeparator />

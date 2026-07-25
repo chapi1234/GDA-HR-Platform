@@ -35,7 +35,7 @@ import { toast } from "react-toastify";
 const API_URL = import.meta.env.VITE_API_URL;
 
 export const AuthForm = () => {
-  const { login, signup } = useAuth();
+  const { login, signup, isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState("login"); // 'login', 'signup', 'forgot-email', 'forgot-code', 'forgot-password'
@@ -235,6 +235,16 @@ export const AuthForm = () => {
           </h1>
           <p className="text-muted-foreground">Human Resource Management System</p>
         </div>
+        {isAuthenticated && (
+          <div className="mb-4 rounded-lg border border-border bg-card p-3 text-center text-sm">
+            <p className="text-muted-foreground mb-2">
+              Signed in as <strong className="text-foreground">{user?.name || user?.email}</strong>
+            </p>
+            <Button type="button" variant="outline" size="sm" onClick={() => navigate("/dashboard")}>
+              Continue to dashboard
+            </Button>
+          </div>
+        )}
         <Card className="shadow-xl border border-border bg-card" style={{ marginTop: 15 }}>
           <CardHeader className="text-center pb-4">
             {mode === "login" && (

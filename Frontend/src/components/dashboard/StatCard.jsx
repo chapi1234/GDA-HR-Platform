@@ -7,7 +7,10 @@ export const StatCard = ({
   icon: Icon,
   trend = 'up',
   className = '',
+  /** When true and changeLabel is omitted, appends "vs last month". */
   showVsLastMonth = true,
+  /** Overrides the default comparison label (e.g. "vs yesterday", "vs last week"). */
+  changeLabel,
   style,
 }) => {
   const trendColor =
@@ -16,6 +19,13 @@ export const StatCard = ({
       : trend === 'down'
         ? 'text-destructive'
         : 'text-muted-foreground';
+
+  const comparisonLabel =
+    changeLabel !== undefined
+      ? changeLabel
+      : showVsLastMonth
+        ? 'vs last month'
+        : null;
 
   return (
     <Card className={`dashboard-card h-full ${className}`} style={style}>
@@ -32,11 +42,11 @@ export const StatCard = ({
               {change ? (
                 <p className={`flex flex-wrap items-center gap-x-1 text-sm font-medium ${trendColor}`}>
                   <span>{change}</span>
-                  {showVsLastMonth && (
+                  {comparisonLabel ? (
                     <span className="text-xs font-normal text-muted-foreground">
-                      vs last month
+                      {comparisonLabel}
                     </span>
-                  )}
+                  ) : null}
                 </p>
               ) : null}
             </div>
