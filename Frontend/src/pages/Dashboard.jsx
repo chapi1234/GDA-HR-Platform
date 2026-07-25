@@ -475,8 +475,6 @@ const Dashboard = () => {
   const [leaveBalanceDays, setLeaveBalanceDays] = useState(null);
   const [leaveMoM, setLeaveMoM] = useState({ change: null, trend: "neutral" });
   const [leavePendingMine, setLeavePendingMine] = useState(null);
-  const [salaryDebug, setSalaryDebug] = useState(null);
-  const [showSalaryDebug, setShowSalaryDebug] = useState(false);
 
   const thisMonthKey = useMemo(() => currentMonthKey(), []);
   const thisMonthLabel = useMemo(
@@ -616,20 +614,35 @@ const Dashboard = () => {
           }))
         );
 
-        // Personal dashboard: prefer latest approved/paid net over static employee.salary
-        if (!manageView && countable.length) {
-          const sorted = [...countable].sort((a, b) => {
-            const da = new Date(a.payDate || a.payrollMonth || 0).getTime();
-            const db = new Date(b.payDate || b.payrollMonth || 0).getTime();
-            return db - da;
+        // Personal dashboard: latest approved/paid net only — never employee.salary
+        if (!manageView) {
+          const myId = String(user?.id || user?._id || "");
+          const myEmpCode = String(user?.employeeId || "");
+          const mine = countable.filter((p) => {
+            const empRef = p.employee?._id || p.employee || p.employeeId;
+            return (
+              (myId && String(empRef) === myId) ||
+              (myEmpCode && String(p.employeeId) === myEmpCode)
+            );
           });
-          const latestNet = Number(sorted[0]?.netSalary);
-          const prevNet = sorted[1] != null ? Number(sorted[1].netSalary) : null;
-          if (!Number.isNaN(latestNet)) setCurrentSalary(latestNet);
-          if (!Number.isNaN(latestNet) && prevNet != null && !Number.isNaN(prevNet)) {
-            setNetPayDelta(buildPercentDelta(latestNet, prevNet));
-          } else {
+          if (!mine.length) {
+            setCurrentSalary(null);
             setNetPayDelta({ change: null, trend: "neutral" });
+          } else {
+            const sorted = [...mine].sort((a, b) => {
+              const da = new Date(a.payDate || a.payrollMonth || 0).getTime();
+              const db = new Date(b.payDate || b.payrollMonth || 0).getTime();
+              return db - da;
+            });
+            const latestNet = Number(sorted[0]?.netSalary);
+            const prevNet = sorted[1] != null ? Number(sorted[1].netSalary) : null;
+            if (!Number.isNaN(latestNet)) setCurrentSalary(latestNet);
+            else setCurrentSalary(null);
+            if (!Number.isNaN(latestNet) && prevNet != null && !Number.isNaN(prevNet)) {
+              setNetPayDelta(buildPercentDelta(latestNet, prevNet));
+            } else {
+              setNetPayDelta({ change: null, trend: "neutral" });
+            }
           }
         }
       } catch (err) {
@@ -656,7 +669,7 @@ const Dashboard = () => {
     fetchPayrollDashboard();
     fetchPendingLeaveRequests();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, manageView]);
+  }, [token, manageView, user?.id, user?._id, user?.employeeId]);
 
   // Employee-specific data (hours this week, attendance rate, salary, leave balance)
   useEffect(() => {
@@ -733,52 +746,6 @@ const Dashboard = () => {
         setAttendanceRateUser(`${thisWeek.rate}%`);
         setHoursWoW(buildDelta(thisWeek.hours, lastWeek.hours, { decimals: 1 }));
         setAttendanceRateWoW(buildDelta(thisWeek.rate, lastWeek.rate, { suffix: "%" }));
-
-        // employee details for salary (defensive: API may return different shapes)
-        try {
-          const empId = user?.id || user?._id;
-          if (empId) {
-            const empRes = await axios.get(`${API_BASE}/api/employees/${empId}`, { headers: { Authorization: `Bearer ${token}` } });
-            // store raw responses for easier debugging in the browser UI
-            setSalaryDebug(prev => ({ ...prev, empRes: empRes.data }));
-            console.debug('employee API response for', empId, empRes.data);
-            // Common shapes: { data: { ...mappedEmployee } } or returned populated user object
-            const possible = empRes.data?.data ?? empRes.data ?? {};
-            // Salary might be number or string; prefer explicit number
-            let salaryVal = (possible && (possible.salary ?? possible.data?.salary)) ?? user?.salary ?? null;
-            // fallback: if still null, try listing employees and match by email or id
-            if (salaryVal == null) {
-              try {
-                const allRes = await axios.get(`${API_BASE}/api/employees`, { headers: { Authorization: `Bearer ${token}` } });
-                // store fallback list for debugging
-                setSalaryDebug(prev => ({ ...prev, allRes: allRes.data }));
-                const list = Array.isArray(allRes.data?.data) ? allRes.data.data : (Array.isArray(allRes.data) ? allRes.data : []);
-                const found = list.find(e => String(e.id || e._id) === String(empId) || String(e.employeeId) === String(user?.employeeId) || (e.email && user?.email && e.email.toLowerCase() === user.email.toLowerCase()));
-                if (found) {
-                  console.debug('found employee in list fallback', found);
-                  salaryVal = found.salary ?? found.data?.salary ?? null;
-                }
-              } catch (fe) {
-                console.debug('fallback employees list fetch failed', fe);
-              }
-            }
-            if (salaryVal == null) {
-              console.debug('salary not found for user; empRes / user:', empRes.data, user);
-            }
-            setCurrentSalary((prev) =>
-              prev != null ? prev : salaryVal != null ? Number(salaryVal) : null
-            );
-          } else {
-            setCurrentSalary((prev) =>
-              prev != null ? prev : user?.salary != null ? Number(user.salary) : null
-            );
-          }
-        } catch (e) {
-          console.error('Failed to fetch employee details', e);
-          setCurrentSalary((prev) =>
-            prev != null ? prev : user?.salary != null ? Number(user.salary) : null
-          );
-        }
 
         // Approved leave days this month vs last month
         try {
