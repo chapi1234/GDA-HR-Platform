@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import { useLanguage } from "../contexts/LanguageContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import {
@@ -410,6 +411,7 @@ function SheetFields({
 }
 
 const Salary = () => {
+  const { t } = useLanguage();
   const marginStyle = { marginBottom: "10px" };
   const button = { width: "220px" };
 
@@ -940,16 +942,10 @@ const Salary = () => {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-foreground">
-            {isOpsView ? "Salary Payment Payroll" : "My Salary"}
+            {isOpsView ? t('pages.salary') : t('pages.mySalary')}
           </h1>
           <p className="text-muted-foreground">
-            {isOpsView
-              ? payrollReadOnly
-                ? "Read-only view of payroll sheet records"
-                : canCreateUi
-                  ? "GaDA payroll sheet — record advances when taken, apply them here, Org HR approves"
-                  : "Payroll records in your scope"
-              : "Your salary / payroll history"}
+            {isOpsView ? t('pages.salaryDesc') : t('pages.mySalaryDesc')}
             {isOpsView && (
               <>
                 {" · "}

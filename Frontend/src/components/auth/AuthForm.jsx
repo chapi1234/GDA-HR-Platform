@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
+import { useLanguage } from "../../contexts/LanguageContext";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -29,6 +30,7 @@ import {
   CheckCircle,
   Eye,
   EyeOff,
+  Globe,
 } from "lucide-react";
 import logo from "../../assets/download.jpg";
 import { toast } from "react-toastify";
@@ -36,6 +38,7 @@ const API_URL = import.meta.env.VITE_API_URL;
 
 export const AuthForm = () => {
   const { login, signup, isAuthenticated, user } = useAuth();
+  const { language, setLanguage, t } = useLanguage();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState("login"); // 'login', 'signup', 'forgot-email', 'forgot-code', 'forgot-password'
@@ -221,6 +224,20 @@ export const AuthForm = () => {
   return (
     <div className="auth-shell min-h-screen flex items-center justify-center p-4">
       <div className="mx-auto transition-all duration-300" style={{ width: "var(--auth-form-width)" }}>
+        <div className="flex justify-end mb-4">
+          <div className="flex items-center gap-2">
+            <Globe className="w-4 h-4 text-muted-foreground" />
+            <Select value={language} onValueChange={(v) => setLanguage(v === "am" ? "am" : "en")}>
+              <SelectTrigger className="w-[140px] h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="en">{t("settings.languageEn")}</SelectItem>
+                <SelectItem value="am">{t("settings.languageAm")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
         {/* Logo and Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-card rounded-full shadow-md border border-border mb-4 overflow-hidden">
@@ -231,17 +248,18 @@ export const AuthForm = () => {
             />
           </div>
           <h1 className="text-2xl font-bold text-foreground mb-2">
-            Gamo Development Association
+            {t("app.fullName")}
           </h1>
-          <p className="text-muted-foreground">Human Resource Management System</p>
+          <p className="text-muted-foreground">{t("app.hrmLong")}</p>
         </div>
         {isAuthenticated && (
           <div className="mb-4 rounded-lg border border-border bg-card p-3 text-center text-sm">
             <p className="text-muted-foreground mb-2">
-              Signed in as <strong className="text-foreground">{user?.name || user?.email}</strong>
+              {t("auth.signedInAs")}{" "}
+              <strong className="text-foreground">{user?.name || user?.email}</strong>
             </p>
             <Button type="button" variant="outline" size="sm" onClick={() => navigate("/dashboard")}>
-              Continue to dashboard
+              {t("auth.continueDashboard")}
             </Button>
           </div>
         )}
@@ -249,36 +267,32 @@ export const AuthForm = () => {
           <CardHeader className="text-center pb-4">
             {mode === "login" && (
               <>
-                <CardTitle className="text-xl">Sign In</CardTitle>
-                <CardDescription>Welcome back to your account</CardDescription>
+                <CardTitle className="text-xl">{t("auth.signIn")}</CardTitle>
+                <CardDescription>{t("auth.welcomeBack")}</CardDescription>
               </>
             )}
             {mode === "signup" && (
               <>
-                <CardTitle className="text-xl">Create Account</CardTitle>
-                <CardDescription>Join our team today</CardDescription>
+                <CardTitle className="text-xl">{t("auth.createAccount")}</CardTitle>
+                <CardDescription>{t("auth.joinTeam")}</CardDescription>
               </>
             )}
             {mode === "forgot-email" && (
               <>
-                <CardTitle className="text-xl">Reset Password</CardTitle>
-                <CardDescription>
-                  Enter your email to receive a reset code
-                </CardDescription>
+                <CardTitle className="text-xl">{t("auth.resetPassword")}</CardTitle>
+                <CardDescription>{t("auth.resetEmailHint")}</CardDescription>
               </>
             )}
             {mode === "forgot-code" && (
               <>
-                <CardTitle className="text-xl">Verify Code</CardTitle>
-                <CardDescription>
-                  Enter the 6-digit code sent to your email
-                </CardDescription>
+                <CardTitle className="text-xl">{t("auth.verifyCode")}</CardTitle>
+                <CardDescription>{t("auth.verifyCodeHint")}</CardDescription>
               </>
             )}
             {mode === "forgot-password" && (
               <>
-                <CardTitle className="text-xl">New Password</CardTitle>
-                <CardDescription>Create your new password</CardDescription>
+                <CardTitle className="text-xl">{t("auth.newPassword")}</CardTitle>
+                <CardDescription>{t("auth.newPasswordHint")}</CardDescription>
               </>
             )}
           </CardHeader>
@@ -289,13 +303,13 @@ export const AuthForm = () => {
               <form onSubmit={handleLogin} className="space-y-4">
                 {/* Email */}
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">{t("auth.email")}</Label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                     <Input
                       id="email"
                       type="email"
-                      placeholder="Enter your email"
+                      placeholder={t("auth.emailPlaceholder")}
                       className="pl-10"
                       value={loginForm.email}
                       onChange={(e) =>
@@ -311,13 +325,13 @@ export const AuthForm = () => {
 
                 {/* Password */}
                 <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password">{t("auth.password")}</Label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                     <Input
                       id="password"
                       type={showPassword.login ? "text" : "password"}
-                      placeholder="Enter your password"
+                      placeholder={t("auth.passwordPlaceholder")}
                       className="pl-10 pr-10"
                       value={loginForm.password}
                       onChange={(e) =>
@@ -350,24 +364,24 @@ export const AuthForm = () => {
                     onClick={() => setMode("forgot-email")}
                     className="text-sm text-primary hover:underline"
                   >
-                    Forgot Password?
+                    {t("auth.forgotPassword")}
                   </button>
                 </div>
 
                 <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Signing In..." : "Sign In"}
+                  {loading ? t("common.loading") : t("auth.signIn")}
                 </Button>
 
                 {/* Toggle to Sign Up */}
                 <div className="text-center pt-4 border-t">
                   <p className="text-sm text-muted-foreground">
-                    Don't have an account?{" "}
+                    {t("auth.noAccount")}{" "}
                     <button
                       type="button"
                       onClick={() => setMode("signup")}
                       className="text-primary hover:underline font-medium"
                     >
-                      Sign up
+                      {t("auth.signUp")}
                     </button>
                   </p>
                 </div>
@@ -378,7 +392,7 @@ export const AuthForm = () => {
             {mode === "signup" && (
               <form onSubmit={handleSignup} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="fullName">Full Name</Label>
+                  <Label htmlFor="fullName">{t("auth.fullName")}</Label>
                   <div className="relative">
                     <User className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                     <Input
@@ -582,13 +596,13 @@ export const AuthForm = () => {
                 {/* Toggle to Sign In */}
                 <div className="text-center pt-4 border-t">
                   <p className="text-sm text-muted-foreground">
-                    Already have an account?{" "}
+                    {t("auth.hasAccount")}{" "}
                     <button
                       type="button"
                       onClick={() => setMode("login")}
                       className="text-primary hover:underline font-medium"
                     >
-                      Sign in
+                      {t("auth.signIn")}
                     </button>
                   </p>
                 </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import axios from 'axios';
 import { useAuth } from "../contexts/AuthContext";
+import { useLanguage } from "../contexts/LanguageContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import {
@@ -68,6 +69,7 @@ import {
 import { toast } from "react-toastify";
 
 const Recruitment = () => {
+  const { t } = useLanguage();
 
   const wrapperStyle = {
     paddingBottom: "20px",
@@ -601,19 +603,15 @@ const Recruitment = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Recruitment</h1>
-          <p className="text-muted-foreground">
-            {isHR
-              ? "Manage job postings and applicants"
-              : "View available positions"}
-          </p>
+          <h1 className="text-3xl font-bold text-foreground">{t('pages.recruitment')}</h1>
+          <p className="text-muted-foreground">{t('pages.recruitmentDesc')}</p>
         </div>
         {isHR && (
           <Dialog open={showJobDialog} onOpenChange={setShowJobDialog}>
             <DialogTrigger asChild style={{ ...marginStyle, ...button }}>
               <Button className="btn-gradient">
                 <Plus className="w-4 h-4 mr-2" />
-                Post New Job
+                {t('recruitment.addJob')}
               </Button>
             </DialogTrigger>
             <DialogContent

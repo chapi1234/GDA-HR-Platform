@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -29,6 +30,8 @@ const currentMonthKey = () => {
 };
 
 const LeaveRequests = () => {
+  const { t } = useLanguage();
+  
   const wrapperStyle = {
     paddingBottom: '20px',
     marginTop: '20px',
@@ -262,24 +265,20 @@ const LeaveRequests = () => {
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Leave Requests</h1>
-          <p className="text-muted-foreground">
-            {canReview
-              ? 'Manage employee leave requests'
-              : 'Submit and track your leave requests'}
-          </p>
+          <h1 className="text-3xl font-bold text-foreground">{t('pages.leave')}</h1>
+          <p className="text-muted-foreground">{t('pages.leaveDesc')}</p>
         </div>
         <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
           <DialogTrigger asChild style={{ ...marginStyle, ...button }}>
             <Button className="btn-gradient">
               <Plus className="w-4 h-4 mr-2" />
-              Request Leave
+              {t('pages.requestLeave')}
             </Button>
           </DialogTrigger>
           <DialogContent style={{ maxHeight: '90vh', overflowY: 'auto' }}>
             <DialogHeader>
-              <DialogTitle>Submit Leave Request</DialogTitle>
-              <DialogDescription>Fill in the details for your leave request</DialogDescription>
+              <DialogTitle>{t('pages.requestLeave')}</DialogTitle>
+              <DialogDescription>{t('pages.leaveDesc')}</DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div>
@@ -561,10 +560,8 @@ const LeaveRequests = () => {
       {!loading && filteredRequests.length === 0 && (
         <div className="text-center py-12">
           <Calendar className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-semibold mb-2">No leave requests found</h3>
-          <p className="text-muted-foreground">
-            No requests overlapping {selectedMonthLabel}. Try another month or adjust filters.
-          </p>
+          <h3 className="text-lg font-semibold mb-2">{t('leave.noRequests')}</h3>
+          <p className="text-muted-foreground">{t('common.noResults')}</p>
         </div>
       )}
     </div>

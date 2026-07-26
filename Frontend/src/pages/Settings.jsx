@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -38,6 +39,7 @@ const Settings = () => {
 
   const { user } = useAuth();
   const { theme, setTheme, colorScheme, setColorScheme } = useTheme();
+  const { language, setLanguage, t } = useLanguage();
   const [settings, setSettings] = useState({
     // Notifications
     emailNotifications: true,
@@ -52,15 +54,33 @@ const Settings = () => {
     shareCalendar: false,
     
     // Language & Region
-    language: 'en',
-    timezone: 'UTC-5',
-    dateFormat: 'MM/DD/YYYY',
+    language: language || 'en',
+    timezone: 'UTC+3',
+    dateFormat: 'DD/MM/YYYY',
     
     // Advanced
     twoFactorAuth: false,
     sessionTimeout: '8',
-    autoLogout: true
+    autoLogout: true,
+    fontSize: 'medium',
+    compactMode: false,
   });
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('userSettings');
+      if (raw) {
+        const saved = JSON.parse(raw);
+        setSettings((prev) => ({
+          ...prev,
+          ...saved,
+          language: language || saved.language || 'en',
+        }));
+      }
+    } catch {
+      // ignore
+    }
+  }, [language]);
 
   const colorSchemes = [
     { value: 'blue', label: 'Blue', color: 'bg-blue-500' },
@@ -71,10 +91,16 @@ const Settings = () => {
     { value: 'teal', label: 'Teal', color: 'bg-teal-500' }
   ];
 
+  const handleLanguageChange = (value) => {
+    const lang = value === 'am' ? 'am' : 'en';
+    setSettings((prev) => ({ ...prev, language: lang }));
+    setLanguage(lang);
+    toast.success(lang === 'am' ? 'ቋንቋ ተቀይሯል' : 'Language updated');
+  };
+
   const handleSaveSettings = () => {
-    // Simulate saving settings
-    localStorage.setItem('userSettings', JSON.stringify(settings));
-    toast.success('Settings saved successfully!');
+    localStorage.setItem('userSettings', JSON.stringify({ ...settings, language }));
+    toast.success(t('settings.saved'));
   };
 
   const handleExportData = () => {
@@ -112,7 +138,7 @@ const Settings = () => {
 
     const day = new Date().toISOString().split('T')[0];
     XLSX.writeFile(book, `GaDA-Settings-Export-${day}.xlsx`);
-    toast.success('Data exported to Excel');
+    toast.success(t('settings.exported'));
   };
 
   return (
@@ -121,22 +147,22 @@ const Settings = () => {
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Settings</h1>
-            <p className="text-muted-foreground">Customize your experience and preferences</p>
+            <h1 className="text-3xl font-bold text-foreground">{t("settings.title")}</h1>
+            <p className="text-muted-foreground">{t("settings.subtitle")}</p>
           </div>
           <Button style={button} onClick={handleSaveSettings} className="btn-gradient">
             <Save className="w-4 h-4 mr-2" />
-            Save Settings
+            {t("settings.saveSettings")}
           </Button>
         </div>
 
         <Tabs defaultValue="appearance" className="w-full">
           <TabsList style={marginStyle} className="flex flex-wrap w-full gap-2 mb-6">
-            <TabsTrigger value="appearance">Appearance</TabsTrigger>
-            <TabsTrigger value="notifications">Notifications</TabsTrigger>
-            <TabsTrigger value="privacy">Privacy</TabsTrigger>
-            <TabsTrigger value="regional">Regional</TabsTrigger>
-            <TabsTrigger value="advanced">Advanced</TabsTrigger>
+            <TabsTrigger value="appearance">{t("settings.tabs.appearance")}</TabsTrigger>
+            <TabsTrigger value="notifications">{t("settings.tabs.notifications")}</TabsTrigger>
+            <TabsTrigger value="privacy">{t("settings.tabs.privacy")}</TabsTrigger>
+            <TabsTrigger value="regional">{t("settings.tabs.regional")}</TabsTrigger>
+            <TabsTrigger value="advanced">{t("settings.tabs.advanced")}</TabsTrigger>
           </TabsList>
 
           {/* Appearance Settings */}
@@ -147,12 +173,12 @@ const Settings = () => {
                   <Palette className="w-5 h-5 mr-2" />
                   Appearance & Theme
                 </CardTitle>
-                <CardDescription>Customize how GammoDA looks and feels</CardDescription>
+                <CardDescription>{t("settings.appearanceDesc")}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Theme</Label>
+                    <Label>{t("settings.themeMode")}</Label>
                     <Select value={theme} onValueChange={setTheme}>
                       <SelectTrigger className="cursor-pointer">
                         <SelectValue />
@@ -161,19 +187,19 @@ const Settings = () => {
                         <SelectItem value="light">
                           <div className="flex items-center">
                             <Sun className="w-4 h-4 mr-2" />
-                            Light
+                            {t("settings.light")}
                           </div>
                         </SelectItem>
                         <SelectItem value="dark">
                           <div className="flex items-center">
                             <Moon className="w-4 h-4 mr-2" />
-                            Dark
+                            {t("settings.dark")}
                           </div>
                         </SelectItem>
                         <SelectItem value="system">
                           <div className="flex items-center">
                             <Monitor className="w-4 h-4 mr-2" />
-                            System
+                            {t("settings.system")}
                           </div>
                         </SelectItem>
                       </SelectContent>
@@ -181,7 +207,7 @@ const Settings = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Color Scheme</Label>
+                    <Label>{t("settings.colorScheme")}</Label>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       {colorSchemes.map((scheme) => (
                         <div
@@ -245,14 +271,14 @@ const Settings = () => {
                   <Bell className="w-5 h-5 mr-2" />
                   Notification Preferences
                 </CardTitle>
-                <CardDescription>Choose how and when you want to be notified</CardDescription>
+                <CardDescription>{t("settings.notificationsDesc")}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-4">
                   <div className="flex items-center justify-between p-2 rounded-lg hover:bg-accent transition-colors cursor-pointer">
                     <div className="space-y-0.5">
-                      <Label className="cursor-pointer">Email Notifications</Label>
-                      <p className="text-sm text-muted-foreground">Receive notifications via email</p>
+                      <Label className="cursor-pointer">{t("settings.emailNotifications")}</Label>
+                      <p className="text-sm text-muted-foreground">{t("settings.emailNotificationsDesc")}</p>
                     </div>
                     <Switch
                       checked={settings.emailNotifications}
@@ -262,8 +288,8 @@ const Settings = () => {
 
                   <div className="flex items-center justify-between p-2 rounded-lg hover:bg-accent transition-colors cursor-pointer">
                     <div className="space-y-0.5">
-                      <Label className="cursor-pointer">Push Notifications</Label>
-                      <p className="text-sm text-muted-foreground">Receive browser push notifications</p>
+                      <Label className="cursor-pointer">{t("settings.pushNotifications")}</Label>
+                      <p className="text-sm text-muted-foreground">{t("settings.pushNotificationsDesc")}</p>
                     </div>
                     <Switch
                       checked={settings.pushNotifications}
@@ -275,8 +301,8 @@ const Settings = () => {
 
                   <div className="flex items-center justify-between p-2 rounded-lg hover:bg-accent transition-colors cursor-pointer">
                     <div className="space-y-0.5">
-                      <Label className="cursor-pointer">Weekly Reports</Label>
-                      <p className="text-sm text-muted-foreground">Receive weekly attendance and performance reports</p>
+                      <Label className="cursor-pointer">{t("settings.weeklyReports")}</Label>
+                      <p className="text-sm text-muted-foreground">{t("settings.weeklyReportsDesc")}</p>
                     </div>
                     <Switch
                       checked={settings.weeklyReports}
@@ -286,8 +312,8 @@ const Settings = () => {
 
                   <div className="flex items-center justify-between p-2 rounded-lg hover:bg-accent transition-colors cursor-pointer">
                     <div className="space-y-0.5">
-                      <Label className="cursor-pointer">Leave Reminders</Label>
-                      <p className="text-sm text-muted-foreground">Get reminded about pending leave requests</p>
+                      <Label className="cursor-pointer">{t("settings.leaveReminders")}</Label>
+                      <p className="text-sm text-muted-foreground">{t("settings.leaveRemindersDesc")}</p>
                     </div>
                     <Switch
                       checked={settings.leaveReminders}
@@ -297,8 +323,8 @@ const Settings = () => {
 
                   <div className="flex items-center justify-between p-2 rounded-lg hover:bg-accent transition-colors cursor-pointer">
                     <div className="space-y-0.5">
-                      <Label className="cursor-pointer">Attendance Alerts</Label>
-                      <p className="text-sm text-muted-foreground">Notifications for attendance-related activities</p>
+                      <Label className="cursor-pointer">{t("settings.attendanceAlerts")}</Label>
+                      <p className="text-sm text-muted-foreground">{t("settings.attendanceAlertsDesc")}</p>
                     </div>
                     <Switch
                       checked={settings.attendanceAlerts}
@@ -316,31 +342,30 @@ const Settings = () => {
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Shield className="w-5 h-5 mr-2" />
-                  Privacy & Security
+                  {t("settings.privacyTitle")}
                 </CardTitle>
-                <CardDescription>Control who can see your information</CardDescription>
+                <CardDescription>{t("settings.privacyDesc")}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Profile Visibility</Label>
+                    <Label>{t("settings.profileVisibility")}</Label>
                     <Select value={settings.profileVisibility} onValueChange={(value) => setSettings({...settings, profileVisibility: value})}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="public">Everyone</SelectItem>
-                        <SelectItem value="team">Team Members Only</SelectItem>
-                        <SelectItem value="department">Unit Only</SelectItem>
-                        <SelectItem value="private">Private</SelectItem>
+                        <SelectItem value="public">{t("settings.everyone")}</SelectItem>
+                        <SelectItem value="team">{t("settings.team")}</SelectItem>
+                        <SelectItem value="department">{t("settings.team")}</SelectItem>
+                        <SelectItem value="private">{t("settings.private")}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
-                      <Label>Show Online Status</Label>
-                      <p className="text-sm text-muted-foreground">Let others see when you're online</p>
+                      <Label>{t("settings.showOnlineStatus")}</Label>
                     </div>
                     <Switch
                       checked={settings.showOnlineStatus}
@@ -350,8 +375,7 @@ const Settings = () => {
 
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
-                      <Label>Share Calendar</Label>
-                      <p className="text-sm text-muted-foreground">Allow team members to view your calendar</p>
+                      <Label>{t("settings.shareCalendar")}</Label>
                     </div>
                     <Switch
                       checked={settings.shareCalendar}
@@ -369,29 +393,27 @@ const Settings = () => {
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Globe className="w-5 h-5 mr-2" />
-                  Language & Region
+                  {t("settings.languageRegionTitle")}
                 </CardTitle>
-                <CardDescription>Set your language, timezone, and regional preferences</CardDescription>
+                <CardDescription>{t("settings.languageRegionDesc")}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Language</Label>
-                    <Select value={settings.language} onValueChange={(value) => setSettings({...settings, language: value})}>
+                    <Label>{t("settings.language")}</Label>
+                    <Select value={language} onValueChange={handleLanguageChange}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="en">English</SelectItem>
-                        <SelectItem value="es">Spanish</SelectItem>
-                        <SelectItem value="fr">French</SelectItem>
-                        <SelectItem value="de">German</SelectItem>
+                        <SelectItem value="en">{t("settings.languageEn")}</SelectItem>
+                        <SelectItem value="am">{t("settings.languageAm")}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Timezone</Label>
+                    <Label>{t("settings.timezone")}</Label>
                     <Select value={settings.timezone} onValueChange={(value) => setSettings({...settings, timezone: value})}>
                       <SelectTrigger>
                         <SelectValue />
@@ -407,7 +429,7 @@ const Settings = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Date Format</Label>
+                    <Label>{t("settings.dateFormat")}</Label>
                     <Select value={settings.dateFormat} onValueChange={(value) => setSettings({...settings, dateFormat: value})}>
                       <SelectTrigger>
                         <SelectValue />
@@ -430,16 +452,15 @@ const Settings = () => {
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <SettingsIcon className="w-5 h-5 mr-2" />
-                  Advanced Settings
+                  {t("settings.advancedTitle")}
                 </CardTitle>
-                <CardDescription>Security and data management options</CardDescription>
+                <CardDescription>{t("settings.advancedDesc")}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
-                      <Label>Two-Factor Authentication</Label>
-                      <p className="text-sm text-muted-foreground">Add an extra layer of security to your account</p>
+                      <Label>{t("settings.twoFactor")}</Label>
                     </div>
                     <Switch
                       checked={settings.twoFactorAuth}
@@ -448,24 +469,23 @@ const Settings = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Session Timeout (hours)</Label>
+                    <Label>{t("settings.sessionTimeout")}</Label>
                     <Select value={settings.sessionTimeout} onValueChange={(value) => setSettings({...settings, sessionTimeout: value})}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="1">1 hour</SelectItem>
-                        <SelectItem value="4">4 hours</SelectItem>
-                        <SelectItem value="8">8 hours</SelectItem>
-                        <SelectItem value="24">24 hours</SelectItem>
+                        <SelectItem value="1">1</SelectItem>
+                        <SelectItem value="4">4</SelectItem>
+                        <SelectItem value="8">8</SelectItem>
+                        <SelectItem value="24">24</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
-                      <Label>Auto Logout</Label>
-                      <p className="text-sm text-muted-foreground">Automatically log out when session expires</p>
+                      <Label>{t("settings.autoLogout")}</Label>
                     </div>
                     <Switch
                       checked={settings.autoLogout}
@@ -476,15 +496,16 @@ const Settings = () => {
                   <Separator />
 
                   <div className="space-y-4">
-                    <h4 className="font-semibold">Data Management</h4>
+                    <h4 className="font-semibold">{t("settings.exportData")}</h4>
+                    <p className="text-sm text-muted-foreground">{t("settings.exportDataDesc")}</p>
                     <div className="flex space-x-2">
                       <Button variant="outline" onClick={handleExportData}>
                         <Download className="w-4 h-4 mr-2" />
-                        Export Excel
+                        {t("settings.exportButton")}
                       </Button>
                       <Button variant="outline">
                         <Upload className="w-4 h-4 mr-2" />
-                        Import Data
+                        {t("common.import")}
                       </Button>
                     </div>
                   </div>

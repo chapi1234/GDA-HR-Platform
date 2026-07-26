@@ -32,9 +32,17 @@ function ItemIcon({ item, unread }) {
     unread ? "text-amber-600" : "text-muted-foreground"
   }`;
   if (item.kind === "salary_advance") return <Wallet className={cls} />;
-  if (item.kind === "payroll_created") return <DollarSign className={cls} />;
+  if (
+    item.kind === "payroll_created" ||
+    item.kind === "payslip_ready" ||
+    item.kind === "payroll_rejected" ||
+    item.kind === "payroll_paid" ||
+    item.kind === "payroll_reminder"
+  )
+    return <DollarSign className={cls} />;
   if (item.kind === "chat_message") return <MessageSquare className={cls} />;
-  if (item.kind === "leave_reviewed") return <Calendar className={cls} />;
+  if (item.kind === "leave_reviewed" || item.kind === "leave_submitted")
+    return <Calendar className={cls} />;
   if (item.kind === "device_assignment" || item.kind === "device_return_due")
     return <Laptop className={cls} />;
   return <Megaphone className={cls} />;

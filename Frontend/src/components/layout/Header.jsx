@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 import { Button } from '../ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import {
@@ -32,9 +33,16 @@ export const Header = () => {
   const auth = useAuth();
   const { user, logout, roleLabel, canManage } = auth;
   const { theme, setTheme } = useTheme();
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const roleKey = `roles.${String(user?.role || '').toLowerCase()}`;
+  const translatedRole = (() => {
+    const val = t(roleKey);
+    return val === roleKey ? roleLabel : val;
+  })();
 
   const getDepartmentName = (dept) => {
     if (!dept) return '';
@@ -132,9 +140,9 @@ export const Header = () => {
               <img src={logo} alt="GammoDA Logo" className="w-8 h-8 object-cover" />
             </div>
             <div className="min-w-0">
-              <h1 className="font-bold text-lg sm:text-xl text-foreground truncate">GammoDA</h1>
+              <h1 className="font-bold text-lg sm:text-xl text-foreground truncate">{t("app.name")}</h1>
               <p className="text-xs text-muted-foreground -mt-1 hidden xs:block sm:block">
-                HRM System
+                {t("app.hrm")}
               </p>
             </div>
           </Link>
@@ -145,7 +153,7 @@ export const Header = () => {
               size="icon"
               className="h-9 w-9"
               onClick={toggleTheme}
-              title={`Current theme: ${theme}`}
+              title={t("layout.themeCurrent", { theme })}
             >
               <ThemeIcon className="w-5 h-5" />
             </Button>
@@ -171,7 +179,7 @@ export const Header = () => {
                       variant={canManage ? 'default' : 'secondary'}
                       className="text-xs"
                     >
-                      {roleLabel}
+                      {translatedRole}
                     </Badge>
                   </div>
                 </Button>
@@ -184,26 +192,26 @@ export const Header = () => {
                     {unitLeaf(user?.unitPath) ||
                       deptName ||
                       getDepartmentName(user?.department) ||
-                      roleLabel}
+                      translatedRole}
                   </Badge>
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
                   <Link to="/profile" className="flex items-center">
                     <User className="w-4 h-4 mr-2" />
-                    Profile
+                    {t("layout.profile")}
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link to="/settings" className="flex items-center">
                     <Settings className="w-4 h-4 mr-2" />
-                    Settings
+                    {t("layout.settings")}
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="text-destructive">
                   <LogOut className="w-4 h-4 mr-2" />
-                  Sign Out
+                  {t("layout.signOut")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -213,7 +221,7 @@ export const Header = () => {
               variant="ghost"
               size="icon"
               className="h-9 w-9"
-              aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+              aria-label={mobileMenuOpen ? t("layout.closeMenu") : t("layout.openMenu")}
               aria-expanded={mobileMenuOpen}
               onClick={() => setMobileMenuOpen((open) => !open)}
             >
@@ -252,7 +260,7 @@ export const Header = () => {
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     <Icon className="w-4 h-4 shrink-0" />
-                    <span>{item.label}</span>
+                    <span>{t(item.labelKey)}</span>
                   </Link>
                 );
               })}

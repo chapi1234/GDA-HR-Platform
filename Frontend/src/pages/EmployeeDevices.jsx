@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import axios from 'axios';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -14,6 +15,7 @@ import { useClientPagination } from '../hooks/useClientPagination';
 import ListPagination from '../components/ListPagination';
 
 const EmployeeDevices = () => {
+  const { t } = useLanguage();
 
   const wrapperStyle = {
     paddingBottom: "20px",
@@ -132,13 +134,13 @@ const EmployeeDevices = () => {
       <div className="bg-gradient-hero rounded-2xl p-8 text-black dark:text-white">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold mb-2">My Company Devices</h1>
-            <p className="text-primary-foreground/90">Devices assigned to you by the company</p>
+            <h1 className="text-3xl font-bold mb-2">{t('devices.myCompanyDevices')}</h1>
+            <p className="text-primary-foreground/90">{t('pages.myDevicesDesc')}</p>
           </div>
           <div className="hidden md:block">
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
               <div className="text-2xl font-bold">{myDevices.length}</div>
-              <div className="text-sm text-primary-foreground/80">Total Devices</div>
+              <div className="text-sm text-primary-foreground/80">{t('common.total')}</div>
             </div>
           </div>
         </div>

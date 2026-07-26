@@ -11,11 +11,12 @@ import {
   reopenAdvancesForPayroll,
   recoverAdvancesForPayroll,
 } from "../utils/advanceApply.js";
-import { notifyPayrollCreated } from "../utils/notifyEmployee.js";
+import {
+  notifyPayrollCreated,
+  notifyPayrollStatus,
+} from "../utils/notifyEmployee.js";
 import { payrollMonthKey, monthLabelFromKey, monthRangeFromKey } from "../utils/payrollMonth.js";
 import { upsertPayslipFromPayroll } from "../utils/payslipFromPayroll.js";
-import Notification from "../models/Notification.js";
-import { emitToUser } from "../socket.js";
 import {
   pushAudit,
   assertMonthWritable,
@@ -571,30 +572,13 @@ export const approvePayroll = async (req, res) => {
       const empDoc =
         populated?.employee && populated.employee.email != null
           ? populated.employee
-          : await Employee.findById(payroll.employee);
+          : await Employee.findById(payroll.employee).select("name email");
       if (empDoc?._id) {
-        const title = "Payslip available";
-        const description = `Your payslip for ${monthLabelFromKey(
-          payroll.payrollMonth
-        )} is ready (net ${Number(payroll.netSalary || 0).toLocaleString()} ETB).`;
-        const row = await Notification.create({
-          recipient: empDoc._id,
-          kind: "payslip_ready",
-          title,
-          description,
-          href: "/payslips",
-          meta: {
-            payslipId: String(payslip?._id || ""),
-            payrollId: String(payroll._id),
-          },
-        });
-        emitToUser(empDoc._id, "notify:personal", {
-          id: String(row._id),
-          kind: "payslip_ready",
-          title,
-          description,
-          href: "/payslips",
-          createdAt: (row.createdAt || new Date()).toISOString(),
+        notifyPayrollStatus({
+          employee: empDoc,
+          payroll,
+          status: "approved",
+          decidedByName: req.user?.name || "",
         });
       }
     } catch (err) {
@@ -665,9 +649,27 @@ export const rejectPayroll = async (req, res) => {
     await payroll.save();
 
     const populated = await Payroll.findById(payroll._id)
-      .populate({ path: "employee", select: "name employeeId" })
+      .populate({ path: "employee", select: "name employeeId email" })
       .populate({ path: "preparedBy", select: "name role" })
       .populate({ path: "approvedBy", select: "name role" });
+
+    try {
+      const empDoc =
+        populated?.employee && populated.employee.email != null
+          ? populated.employee
+          : await Employee.findById(payroll.employee).select("name email");
+      if (empDoc?._id) {
+        notifyPayrollStatus({
+          employee: empDoc,
+          payroll,
+          status: "rejected",
+          decidedByName: req.user?.name || "",
+          reason: payroll.rejectionReason || "",
+        });
+      }
+    } catch (err) {
+      console.error("reject payroll notify", err);
+    }
 
     logActivity({
       actor: payroll.employee,

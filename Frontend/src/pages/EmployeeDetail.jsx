@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
+import { useLanguage } from "../contexts/LanguageContext";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
@@ -139,8 +140,8 @@ const EmployeeDetail = () => {
               Back to Employees
             </Link>
           </Button>
-          <h1 className="text-3xl font-bold text-foreground">Employee Details</h1>
-          <p className="text-muted-foreground">Full profile and employment information</p>
+          <h1 className="text-3xl font-bold text-foreground">{t('pages.employeeDetails')}</h1>
+          <p className="text-muted-foreground">{t('pages.employeeDetailsDesc')}</p>
         </div>
       </div>
 

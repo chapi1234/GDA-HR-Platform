@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import { useLanguage } from "../contexts/LanguageContext";
 import { Button } from "../components/ui/button";
 import {
   Card,
@@ -54,6 +55,7 @@ import { postActivity } from '../lib/postActivity';
 const API_URL = import.meta.env.VITE_API_URL;
 
 const Goals = () => {
+  const { t } = useLanguage();
 
   const wrapperStyle = {
     paddingBottom: "20px",
@@ -271,18 +273,14 @@ const Goals = () => {
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">
-              My Goals & Achievements
-            </h1>
-            <p className="text-muted-foreground">
-              Track your progress and celebrate your achievements
-            </p>
+            <h1 className="text-3xl font-bold text-foreground">{t('pages.goals')}</h1>
+            <p className="text-muted-foreground">{t('pages.goalsDesc')}</p>
           </div>
           <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
             <DialogTrigger asChild style={{ ...marginStyle, ...button }}>
               <Button className="btn-gradient w-full md:w-200px">
                 <Target className="w-4 h-4 mr-2" />
-                Set New Goal
+                {t('goals.addGoal')}
               </Button>
             </DialogTrigger>
             <DialogContent
@@ -290,10 +288,8 @@ const Goals = () => {
               style={{ maxHeight: "90vh", overflowY: "auto" }}
             >
               <DialogHeader>
-                <DialogTitle>Create a New Goal</DialogTitle>
-                <DialogDescription>
-                  Set a new goal to track your progress and achievements.
-                </DialogDescription>
+                <DialogTitle>{t('goals.addGoal')}</DialogTitle>
+                <DialogDescription>{t('pages.goalsDesc')}</DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
                 <div className="space-y-2">

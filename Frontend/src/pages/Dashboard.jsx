@@ -1,4 +1,5 @@
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { StatCard } from '../components/dashboard/StatCard';
@@ -217,21 +218,21 @@ function defaultDistributionLevel(modeId) {
   return "sector"; // superadmin, admin, hr
 }
 
-function distributionLevelOptions(modeId) {
+function distributionLevelOptions(modeId, t) {
   if (modeId === "superadmin" || modeId === "admin" || modeId === "hr") {
     return [
-      { id: "sector", label: "Sectors" },
-      { id: "sub_sector", label: "Sub-sectors" },
-      { id: "unit", label: "Units" },
+      { id: "sector", label: t("dashboard.sectorsLevel") },
+      { id: "sub_sector", label: t("dashboard.subSectorsLevel") },
+      { id: "unit", label: t("dashboard.unitsLevel") },
     ];
   }
   if (modeId === "sector_lead") {
     return [
-      { id: "sub_sector", label: "Sub-sectors" },
-      { id: "unit", label: "Units" },
+      { id: "sub_sector", label: t("dashboard.subSectorsLevel") },
+      { id: "unit", label: t("dashboard.unitsLevel") },
     ];
   }
-  return [{ id: "unit", label: "Units" }];
+  return [{ id: "unit", label: t("dashboard.unitsLevel") }];
 }
 
 function colorForLabel(name) {
@@ -283,6 +284,7 @@ const Dashboard = () => {
   };
 
   const auth = useAuth();
+  const { t } = useLanguage();
   const { user, isSuperAdmin, scopeLevel, canAccessAdminConsole } = auth;
   const mode = getDashboardModeConfig(user);
   const manageView = mode.showTeamKpis;
@@ -307,7 +309,7 @@ const Dashboard = () => {
       null;
     if (unit) return unit;
     if (scopeLevel) return `Scope: ${String(scopeLevel).replaceAll('_', ' ')}`;
-    return manageView ? 'Management scope' : 'Personal';
+    return manageView ? t('dashboard.managementScope') : t('dashboard.personal');
   })();
 
   const modeAuthCaps = { canAccessAdminConsole };
@@ -482,7 +484,7 @@ const Dashboard = () => {
     [thisMonthKey]
   );
 
-  const distributionOptions = distributionLevelOptions(mode.id);
+  const distributionOptions = distributionLevelOptions(mode.id, t);
   const distributionBuilt = useMemo(
     () => buildDistributionData(scopedEmployees, distributionLevel, sectorById),
     [scopedEmployees, distributionLevel, sectorById]
@@ -829,39 +831,39 @@ const Dashboard = () => {
           <StatCard
             title={
               mode.id === 'manager' || mode.id === 'unit_manager'
-                ? 'Active Team Size'
-                : 'Active Employees'
+                ? t('dashboard.activeTeamSize')
+                : t('dashboard.activeEmployees')
             }
             value={totalEmployees !== null ? String(totalEmployees) : '0'}
-            change="In your scope"
+            change={t('dashboard.inYourScope')}
             showVsLastMonth={false}
             icon={Users}
             trend="neutral"
           />
           <StatCard
-            title="Present Today"
+            title={t('dashboard.presentToday')}
             value={String(attendanceStats.present)}
             change={presentMoM.change}
-            changeLabel="vs yesterday"
+            changeLabel={t('dashboard.vsYesterday')}
             showVsLastMonth={false}
             icon={UserCheck}
             trend={presentMoM.trend}
           />
           <StatCard
-            title="Absent Today"
+            title={t('dashboard.absentToday')}
             value={String(attendanceStats.absent)}
             change={absentMoM.change}
-            changeLabel="vs yesterday"
+            changeLabel={t('dashboard.vsYesterday')}
             showVsLastMonth={false}
             icon={Users}
             trend={absentMoM.trend}
           />
           {mode.showPayrollKpi && (
             <StatCard
-              title="Net Payroll This Month"
+              title={t("dashboard.netPayrollThisMonth")}
               value={payrollThisMonth !== null ? formatEtb(payrollThisMonth) : formatEtb(0)}
-              change={payrollMoM.change || "Approved / paid"}
-              changeLabel={payrollMoM.change ? "vs last month" : null}
+              change={payrollMoM.change || t('dashboard.approvedPaid')}
+              changeLabel={payrollMoM.change ? t('dashboard.vsLastMonth') : null}
               showVsLastMonth={false}
               icon={DollarSign}
               trend={payrollMoM.change ? payrollMoM.trend : "neutral"}
@@ -870,11 +872,11 @@ const Dashboard = () => {
           <StatCard
             title={
               mode.id === 'manager' || mode.id === 'unit_manager'
-                ? 'Pending Leave (Team)'
-                : 'Pending Leave'
+                ? t('dashboard.pendingLeaveTeam')
+                : t('dashboard.pendingLeave')
             }
             value={pendingRequestsCount !== null ? String(pendingRequestsCount) : '0'}
-            change="Awaiting review"
+            change={t('dashboard.awaitingReview')}
             showVsLastMonth={false}
             icon={Calendar}
             trend="neutral"
@@ -887,12 +889,12 @@ const Dashboard = () => {
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <Activity className="w-5 h-5 text-primary" />
-                <span>Weekly Attendance</span>
+                <span>{t('dashboard.weeklyAttendance')}</span>
               </CardTitle>
               <CardDescription>
                 {mode.id === 'manager' || mode.id === 'unit_manager'
-                  ? 'Your unit attendance this week'
-                  : 'Employee attendance trends this week'}
+                  ? t('dashboard.weeklyAttendanceUnit')
+                  : t('dashboard.weeklyAttendanceOrg')}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -917,14 +919,14 @@ const Dashboard = () => {
                     <Building2 className="w-5 h-5 text-primary" />
                     <span>
                       {distributionLevel === "sector"
-                        ? "Sector Distribution"
+                        ? t("dashboard.sectorDistribution")
                         : distributionLevel === "sub_sector"
-                          ? "Sub-sector Distribution"
-                          : "Unit Distribution"}
+                          ? t("dashboard.subSectorDistribution")
+                          : t("dashboard.unitDistribution")}
                     </span>
                   </CardTitle>
                   <CardDescription className="mt-1">
-                    Headcount by Sector, Sub-sector, or Unit
+                    {t("dashboard.distributionDesc")}
                   </CardDescription>
                 </div>
                 {distributionOptions.length > 1 && (
@@ -948,7 +950,7 @@ const Dashboard = () => {
             <CardContent>
               {departmentData.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-12 text-center">
-                  No employees placed at this level yet
+                  {t("dashboard.noEmployeesAtLevel")}
                 </p>
               ) : (
                 <ResponsiveContainer width="100%" height={300}>
@@ -993,8 +995,7 @@ const Dashboard = () => {
               </div>
               {distributionSkipped > 0 && (
                 <p className="text-xs text-muted-foreground mt-3">
-                  {distributionSkipped} employee{distributionSkipped === 1 ? "" : "s"} not
-                  counted here (not assigned at this level).
+                  {t("dashboard.employeesNotShown", { count: distributionSkipped })}
                 </p>
               )}
             </CardContent>
@@ -1008,23 +1009,23 @@ const Dashboard = () => {
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <Bell className="w-5 h-5 text-primary" />
-                <span>Recent Activities</span>
+                <span>{t('dashboard.recentActivities')}</span>
               </CardTitle>
               <CardDescription>
                 {mode.id === 'manager' || mode.id === 'unit_manager'
-                  ? 'Last 7 days from your team'
+                  ? t('dashboard.activityTeam')
                   : mode.id === 'sector_lead'
-                    ? 'Last 7 days in your sector'
-                    : 'Last 7 days across the organization'}
+                    ? t('dashboard.activitySector')
+                    : t('dashboard.activityOrg')}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 {loadingActivities && (
-                  <p className="text-sm text-muted-foreground">Loading activity…</p>
+                  <p className="text-sm text-muted-foreground">{t('dashboard.loadingActivity')}</p>
                 )}
                 {!loadingActivities && activities.length === 0 && (
-                  <p className="text-sm text-muted-foreground">No recent activity in your scope yet</p>
+                  <p className="text-sm text-muted-foreground">{t('dashboard.noActivityScope')}</p>
                 )}
                 {!loadingActivities && activityPaging.pagedItems.map((activity) => (
                   <div key={activity.id} className="flex items-center space-x-3 p-3 rounded-lg hover:bg-accent transition-colors">
@@ -1072,17 +1073,17 @@ const Dashboard = () => {
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <Calendar className="w-5 h-5 text-primary" />
-                <span>Today & Upcoming</span>
+                <span>{t('dashboard.todayUpcomingTitle')}</span>
               </CardTitle>
-              <CardDescription>Events for today and the days ahead</CardDescription>
+              <CardDescription>{t('dashboard.eventsAhead')}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 {loadingEvents && (
-                  <p className="text-sm text-muted-foreground">Loading events…</p>
+                  <p className="text-sm text-muted-foreground">{t('dashboard.loadingEvents')}</p>
                 )}
                 {!loadingEvents && upcomingEvents.length === 0 && (
-                  <p className="text-sm text-muted-foreground">No events for today or upcoming</p>
+                  <p className="text-sm text-muted-foreground">{t('dashboard.noEventsUpcoming')}</p>
                 )}
                 {!loadingEvents && upcomingEvents.map((event) => (
                   <button
@@ -1112,7 +1113,7 @@ const Dashboard = () => {
                 className="w-full mt-4"
                 onClick={() => navigate('/calendar')}
               >
-                View Calendar
+                {t("dashboard.viewCalendar")}
               </Button>
             </CardContent>
           </Card>
@@ -1133,34 +1134,34 @@ const Dashboard = () => {
         className="grid grid-cols-1 gap-4 mb-5 items-stretch sm:grid-cols-2 lg:grid-cols-4"
       >
         <StatCard
-          title="Hours This Week"
+          title={t("dashboard.hoursThisWeek")}
           value={hoursThisWeek !== null ? String(hoursThisWeek) : '--'}
           change={hoursWoW.change}
-          changeLabel="vs last week"
+          changeLabel={t("dashboard.vsLastWeek")}
           showVsLastMonth={false}
           icon={Clock}
           trend={hoursWoW.trend}
         />
         <StatCard
-          title="Attendance Rate"
+          title={t("dashboard.attendanceRate")}
           value={attendanceRateUser || '--'}
           change={attendanceRateWoW.change}
-          changeLabel="vs last week"
+          changeLabel={t("dashboard.vsLastWeek")}
           showVsLastMonth={false}
           icon={UserCheck}
           trend={attendanceRateWoW.trend}
         />
         <StatCard
-          title="Latest Net Pay"
+          title={t("dashboard.latestNetPay")}
           value={currentSalary !== null ? formatEtb(currentSalary) : '--'}
           change={netPayDelta.change}
-          changeLabel="vs previous pay"
+          changeLabel={t("dashboard.vsPreviousPay")}
           showVsLastMonth={false}
           icon={DollarSign}
           trend={netPayDelta.trend}
         />
         <StatCard
-          title="Approved Leave Days"
+          title={t("dashboard.approvedLeaveDays")}
           value={leaveBalanceDays !== null ? `${leaveBalanceDays} days` : '--'}
           change={
             leaveMoM.change ||
@@ -1168,7 +1169,7 @@ const Dashboard = () => {
               ? `${thisMonthLabel} · ${leavePendingMine} pending`
               : thisMonthLabel)
           }
-          changeLabel={leaveMoM.change ? "vs last month" : null}
+          changeLabel={leaveMoM.change ? t("dashboard.vsLastMonth") : null}
           showVsLastMonth={false}
           icon={Calendar}
           trend={leaveMoM.change ? leaveMoM.trend : "neutral"}
@@ -1182,9 +1183,9 @@ const Dashboard = () => {
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <TrendingUp className="w-5 h-5 text-primary" />
-              <span>Salary Progression</span>
+              <span>{t("dashboard.salaryProgression")}</span>
             </CardTitle>
-            <CardDescription>Your approved / paid net pay (last 6 months)</CardDescription>
+            <CardDescription>{t("dashboard.salaryProgressionDesc")}</CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
@@ -1206,7 +1207,7 @@ const Dashboard = () => {
               <Calendar className="w-5 h-5 text-primary" />
               <span>My Calendar</span>
             </CardTitle>
-            <CardDescription>Today and upcoming dates</CardDescription>
+            <CardDescription>{t("dashboard.todayUpcoming")}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -1225,11 +1226,11 @@ const Dashboard = () => {
                 </button>
               ))}
               {!loadingEvents && upcomingEvents.length === 0 && (
-                <p className="text-sm text-muted-foreground">No events for today or upcoming</p>
+                <p className="text-sm text-muted-foreground">{t("dashboard.noEventsUpcoming")}</p>
               )}
             </div>
             <Button variant="outline" className="w-full mt-4" onClick={() => navigate('/calendar')}>
-              View Full Calendar
+              {t("dashboard.viewFullCalendar")}
             </Button>
           </CardContent>
         </Card>
@@ -1241,14 +1242,14 @@ const Dashboard = () => {
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <Activity className="w-5 h-5 text-primary" />
-              <span>My Recent Activity</span>
+              <span>{t("dashboard.myRecentActivity")}</span>
             </CardTitle>
-            <CardDescription>Your activity from the last 7 days</CardDescription>
+            <CardDescription>{t("dashboard.myActivityDesc")}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               {loadingActivities && (
-                <p className="text-sm text-muted-foreground">Loading activity…</p>
+                <p className="text-sm text-muted-foreground">{t("dashboard.loadingActivity")}</p>
               )}
               {!loadingActivities && activityPaging.pagedItems.map((activity) => (
                 <div key={activity.id} className="flex items-center space-x-3 p-3 rounded-lg hover:bg-accent transition-colors">
@@ -1265,7 +1266,7 @@ const Dashboard = () => {
                 </div>
               ))}
               {!loadingActivities && activities.length === 0 && (
-                <p className="text-sm text-muted-foreground">No recent activity yet</p>
+                <p className="text-sm text-muted-foreground">{t("dashboard.noActivityYet")}</p>
               )}
             </div>
             {activityPaging.showControls && (

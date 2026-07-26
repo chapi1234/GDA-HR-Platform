@@ -62,15 +62,19 @@ function mapPersonal(n) {
   const href =
     kind === "salary_advance"
       ? "/salary-advances"
-      : kind === "payroll_created"
+      : kind === "payroll_created" ||
+          kind === "payroll_rejected" ||
+          kind === "payroll_reminder"
         ? "/salary"
-        : kind === "payslip_ready"
+        : kind === "payslip_ready" || kind === "payroll_paid"
           ? "/payslips"
           : kind === "chat_message"
             ? n.href || "/chat"
-            : kind === "leave_reviewed"
+            : kind === "leave_reviewed" || kind === "leave_submitted"
               ? "/leave-requests"
-              : n.href || "/salary";
+              : kind === "device_assignment" || kind === "device_return_due"
+                ? n.href || "/my-devices"
+                : n.href || "/salary";
   return {
     id: String(n._id || n.id),
     title: n.title,
@@ -81,15 +85,20 @@ function mapPersonal(n) {
     audienceLabel:
       kind === "salary_advance"
         ? "Salary advance"
-        : kind === "payroll_created"
+        : kind === "payroll_created" ||
+            kind === "payroll_rejected" ||
+            kind === "payroll_paid" ||
+            kind === "payroll_reminder"
           ? "Payroll"
           : kind === "payslip_ready"
             ? "Payslip"
             : kind === "chat_message"
               ? "Chat"
-              : kind === "leave_reviewed"
+              : kind === "leave_reviewed" || kind === "leave_submitted"
                 ? "Leave"
-                : "Personal",
+                : kind === "device_assignment" || kind === "device_return_due"
+                  ? "Device"
+                  : "Personal",
     createdAt: n.createdAt,
     readAt: n.readAt || null,
   };

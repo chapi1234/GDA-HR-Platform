@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import axios from "axios";
 import { io } from "socket.io-client";
 import { useAuth } from "../contexts/AuthContext";
+import { useLanguage } from "../contexts/LanguageContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
@@ -107,6 +108,7 @@ function previewFromMessage(msg) {
 }
 
 const Chat = () => {
+  const { t } = useLanguage();
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const myId = String(user?.id || user?._id || "");
@@ -826,9 +828,9 @@ const Chat = () => {
       <div className="flex flex-col h-full gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Chat</h1>
+            <h1 className="text-3xl font-bold text-foreground">{t("pages.chat")}</h1>
             <p className="text-muted-foreground text-sm">
-              Direct messages, sector channels, and custom groups
+              {t("pages.chatDesc")}
             </p>
           </div>
           <div className="flex gap-2 flex-wrap">
@@ -959,9 +961,9 @@ const Chat = () => {
             {!active ? (
               <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
                 <MessageSquare className="w-12 h-12 text-muted-foreground mb-3" />
-                <h2 className="text-lg font-semibold">Select a conversation</h2>
+                <h2 className="text-lg font-semibold">{t('chat.selectConversation')}</h2>
                 <p className="text-sm text-muted-foreground max-w-sm mt-1">
-                  Message anyone, join your sector channels, or create a private group.
+                  {t('chat.selectHint')}
                 </p>
               </div>
             ) : (

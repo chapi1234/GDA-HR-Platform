@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import axios from 'axios';
 import { useAuth } from "../contexts/AuthContext";
+import { useLanguage } from "../contexts/LanguageContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -40,6 +41,7 @@ import WorkHistoryFields from "../components/org/WorkHistoryFields";
 import { unitLeaf } from "../utils/orgPath";
 
 const Profile = () => {
+  const { t } = useLanguage();
 
   const wrapperStyle = {
     paddingBottom: "20px",
@@ -330,10 +332,8 @@ const Profile = () => {
         {/* Header */}
         <div style={marginStyle} className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">My Profile</h1>
-            <p className="text-muted-foreground">
-              Manage your personal information and settings
-            </p>
+            <h1 className="text-3xl font-bold text-foreground">{t('pages.profile')}</h1>
+            <p className="text-muted-foreground">{t('pages.profileDesc')}</p>
           </div>
           <Button
             style={buttonStyle}
@@ -341,7 +341,7 @@ const Profile = () => {
             variant={isEditing ? "outline" : "default"}
             className={!isEditing ? "btn-gradient" : ""}
           >
-            {isEditing ? "Cancel" : "Edit Profile"}
+            {isEditing ? t('common.cancel') : t('common.edit')}
           </Button>
         </div>
 

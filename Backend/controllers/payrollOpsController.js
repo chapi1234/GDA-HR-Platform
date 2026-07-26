@@ -7,7 +7,12 @@ import { getScopedEmployeeIds } from "../utils/scope.js";
 import { isOrgWide, ROLES } from "../utils/roles.js";
 import { computePayrollSheet } from "../utils/payrollSheet.js";
 import { applyAdvancesToPayroll } from "../utils/advanceApply.js";
-import { notifyPayrollCreated } from "../utils/notifyEmployee.js";
+import {
+  notifyPayrollCreated,
+  notifyPayrollStatus,
+} from "../utils/notifyEmployee.js";
+import { sendEmail } from "../Email/sendEmail.js";
+import getPayrollReminderMailOptions from "../Email/payrollReminderNotify.js";
 import {
   payrollMonthKey,
   monthLabelFromKey,
@@ -91,6 +96,20 @@ export const markPayrollPaid = async (req, res) => {
       );
     } catch (_) {
       /* ignore */
+    }
+
+    try {
+      const emp = await Employee.findById(payroll.employee).select("name email");
+      if (emp?._id) {
+        notifyPayrollStatus({
+          employee: emp,
+          payroll,
+          status: "paid",
+          decidedByName: req.user?.name || "",
+        });
+      }
+    } catch (err) {
+      console.error("mark paid notify", err);
     }
 
     return res.json({ status: true, message: "Marked as paid", data: payroll });
@@ -437,6 +456,20 @@ export const sendMonthEndReminders = async (req, res) => {
         href: "/salary",
         createdAt: note.createdAt.toISOString(),
       });
+      if (mgr.email) {
+        try {
+          await sendEmail(
+            getPayrollReminderMailOptions({
+              email: mgr.email,
+              name: mgr.name,
+              payrollMonth: month,
+              missingCount: missing,
+            })
+          );
+        } catch (err) {
+          console.error("payroll reminder email", err.message);
+        }
+      }
       sent += 1;
     }
 

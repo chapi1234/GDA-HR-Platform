@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { exportTableExcel } from "../utils/exportExcel";
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -51,6 +52,8 @@ const emptyEmployeeForm = () => ({
 });
 
 const Employees = () => {
+  const { t } = useLanguage();
+  
   const wrapperStyle = {
     paddingBottom: "20px",
     marginTop: "20px"
@@ -523,25 +526,25 @@ const Employees = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Employee Management</h1>
-          <p className="text-muted-foreground">Manage your organization's workforce</p>
+          <h1 className="text-3xl font-bold text-foreground">{t('pages.employees')}</h1>
+          <p className="text-muted-foreground">{t('pages.employeesDesc')}</p>
         </div>
         <div className="flex items-center space-x-4">
           <Button variant="outline" onClick={handleExportExcel} style={{ ...marginStyle, ...button }} className="border-primary text-primary hover:bg-primary/10">
             <Download className="w-4 h-4 mr-2" />
-            Export Excel
+            {t('common.export')}
           </Button>
           <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
             <DialogTrigger asChild style={{ ...marginStyle, ...button }}>
               <Button className="btn-gradient">
                 <UserPlus className="w-4 h-4 mr-2" />
-                Add Employee
+                {t('pages.addEmployee')}
               </Button>
             </DialogTrigger>
           <DialogContent style={{ maxHeight: '90vh', overflowY: 'auto' }}>
             <DialogHeader>
-              <DialogTitle>Add New Employee</DialogTitle>
-              <DialogDescription>Enter employee details to add them to the system.</DialogDescription>
+              <DialogTitle>{t('pages.addEmployee')}</DialogTitle>
+              <DialogDescription>{t('pages.employeesDesc')}</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="space-y-2">
@@ -778,7 +781,7 @@ const Employees = () => {
                   <Building2 className="w-4 h-4 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Total Employees</p>
+                  <p className="text-sm text-muted-foreground">{t('employees.totalEmployees')}</p>
                   <p className="text-xl font-bold">{employees.length}</p>
                 </div>
               </div>
@@ -793,7 +796,7 @@ const Employees = () => {
                   <UserPlus className="w-4 h-4 text-success" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Active</p>
+                  <p className="text-sm text-muted-foreground">{t('employees.activeEmployees')}</p>
                   <p className="text-xl font-bold">{employees.filter(e => e.status === 'active').length}</p>
                 </div>
               </div>
@@ -808,7 +811,7 @@ const Employees = () => {
                   <Calendar className="w-4 h-4 text-warning" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">On Leave</p>
+                  <p className="text-sm text-muted-foreground">{t('pages.onLeave')}</p>
                   <p className="text-xl font-bold">{employees.filter(e => e.status === 'on_leave').length}</p>
                 </div>
               </div>
@@ -839,7 +842,7 @@ const Employees = () => {
             <div className="relative flex-1 min-w-full sm:min-w-[250px] md:min-w-[300px] lg:min-w-[240px]">
               <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Search employees..."
+                placeholder={t('pages.searchEmployees')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-12 w-full"
@@ -1106,8 +1109,8 @@ const Employees = () => {
       {filteredEmployees.length === 0 && (
         <div className="text-center py-12">
           <Users className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-semibold mb-2">No employees found</h3>
-          <p className="text-muted-foreground">Try adjusting your search or filters</p>
+          <h3 className="text-lg font-semibold mb-2">{t('employees.noEmployees')}</h3>
+          <p className="text-muted-foreground">{t('common.noResults')}</p>
         </div>
       )}
 

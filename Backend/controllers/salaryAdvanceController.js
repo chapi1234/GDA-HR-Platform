@@ -2,7 +2,10 @@ import SalaryAdvance from "../models/SalaryAdvance.js";
 import Employee from "../models/Employee.js";
 import { canAccessEmployee, getScopedEmployeeIds } from "../utils/scope.js";
 import { isOrgWide, ROLES } from "../utils/roles.js";
-import { notifySalaryAdvanceRecorded } from "../utils/notifyEmployee.js";
+import {
+  notifySalaryAdvanceRecorded,
+  notifySalaryAdvanceCancelled,
+} from "../utils/notifyEmployee.js";
 import { logActivity } from "../utils/logActivity.js";
 
 function actorId(user) {
@@ -321,6 +324,11 @@ export const cancelAdvance = async (req, res) => {
         cancelledBy: String(actorId(req.user) || ""),
         cancelledByName: req.user?.name || "",
       },
+    });
+    notifySalaryAdvanceCancelled({
+      employee: emp,
+      advance,
+      cancelledByName: req.user?.name || "",
     });
     return res.json({
       status: true,

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -30,8 +31,9 @@ import {
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const Attendance = () => {
+  const { t } = useLanguage();
 
-    const wrapperStyle = {
+  const wrapperStyle = {
     paddingBottom: "20px",
     marginTop: "20px"
   };
@@ -563,17 +565,17 @@ const Attendance = () => {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
         <div>
           <h1 className="text-3xl font-bold text-foreground">
-            {teamView ? 'Attendance Management' : 'My Attendance'}
+            {teamView ? t('pages.attendance') : t('pages.attendanceMine')}
           </h1>
           <p className="text-muted-foreground">
-            {teamView ? 'Monitor and manage employee attendance' : 'Track your attendance and working hours'}
+            {teamView ? t('pages.attendanceDesc') : t('pages.attendanceMineDesc')}
           </p>
         </div>
         {teamView ? (
           <div className="flex gap-2">
-            <Button onClick={handleMarkAttendance} className="btn-gradient" disabled={!canCheckIn} title={canCheckIn ? 'Mark my check-in' : 'Already checked in today'}>
+            <Button onClick={handleMarkAttendance} className="btn-gradient" disabled={!canCheckIn} title={canCheckIn ? t('pages.markCheckIn') : t('pages.alreadyCheckedIn')}>
               <Clock className="w-4 h-4 mr-2" />
-              My Check-in
+              {t('pages.checkIn')}
             </Button>
             <Button
               onClick={handleCheckOut}
@@ -582,13 +584,13 @@ const Attendance = () => {
               title={canCheckOut ? 'Mark my check-out' : 'Check-in first or already checked out'}
             >
               <Clock className="w-4 h-4 mr-2" />
-              My Check-out
+              Check-out
             </Button>
           </div>
         ) : (
-          <Button style={buttonStyle} onClick={handleMarkAttendance} className="btn-gradient" disabled={!canCheckIn} title={canCheckIn ? 'Mark your check-in' : 'You already checked in today'}>
+          <Button style={buttonStyle} onClick={handleMarkAttendance} className="btn-gradient" disabled={!canCheckIn} title={canCheckIn ? t('pages.markCheckIn') : t('pages.alreadyCheckedIn')}>
             <Clock className="w-4 h-4 mr-2" />
-            Mark Attendance
+            {t('pages.markCheckIn')}
           </Button>
         )}
       </div>
@@ -603,7 +605,7 @@ const Attendance = () => {
                   <CheckCircle className="w-4 h-4 text-success" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Present</p>
+                  <p className="text-sm text-muted-foreground">{t('pages.present')}</p>
                   <p className="text-xl font-bold">{todayStats.present}</p>
                 </div>
               </div>
@@ -618,7 +620,7 @@ const Attendance = () => {
                   <XCircle className="w-4 h-4 text-destructive" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Absent</p>
+                  <p className="text-sm text-muted-foreground">{t('pages.absent')}</p>
                   <p className="text-xl font-bold">{todayStats.absent}</p>
                 </div>
               </div>
@@ -633,7 +635,7 @@ const Attendance = () => {
                   <AlertCircle className="w-4 h-4 text-warning" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Late</p>
+                  <p className="text-sm text-muted-foreground">{t('pages.late')}</p>
                   <p className="text-xl font-bold">{todayStats.late}</p>
                 </div>
               </div>
@@ -648,7 +650,7 @@ const Attendance = () => {
                   <CalendarIcon className="w-4 h-4 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">On Leave</p>
+                  <p className="text-sm text-muted-foreground">{t('pages.onLeave')}</p>
                   <p className="text-xl font-bold">{todayStats.leave}</p>
                 </div>
               </div>
@@ -663,7 +665,7 @@ const Attendance = () => {
                   <TrendingUp className="w-4 h-4 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Rate</p>
+                  <p className="text-sm text-muted-foreground">{t('pages.rate')}</p>
                   <p className="text-xl font-bold">{attendanceRate}%</p>
                 </div>
               </div>
@@ -756,7 +758,7 @@ const Attendance = () => {
           {/* Attendance Table */}
           <Card className="data-table">
             <CardHeader>
-              <CardTitle>Today's Attendance</CardTitle>
+              <CardTitle>{t('pages.todaysAttendance')}</CardTitle>
               <CardDescription>
                 Employee attendance for {format(selectedDate, "PPP")}
                 {filteredRecords.length > 0
@@ -907,13 +909,13 @@ const Attendance = () => {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Check In</p>
+                    <p className="text-sm text-muted-foreground">{t('pages.checkIn')}</p>
                     <p className="text-2xl font-bold text-success">{
                       (todayRec?.checkIn) || '--'
                     }</p>
                   </div>
                   <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Working Hours</p>
+                    <p className="text-sm text-muted-foreground">{t('pages.workingHours')}</p>
                     <p className="text-2xl font-bold text-primary">{
                       (todayRec?.workingHours) || '0h 00m'
                     }</p>
@@ -950,11 +952,11 @@ const Attendance = () => {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Days Present</p>
+                  <p className="text-sm text-muted-foreground">{t('pages.daysPresent')}</p>
                     <p className="text-2xl font-bold">{weekly.daysPresent}/{weekly.totalDays}</p>
                   </div>
                   <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Total Hours</p>
+                    <p className="text-sm text-muted-foreground">{t('pages.totalHours')}</p>
                     <p className="text-2xl font-bold">{weekly.totalHours}</p>
                   </div>
                   <div className="space-y-2">
@@ -962,7 +964,7 @@ const Attendance = () => {
                     <p className="text-lg font-semibold">{weekly.avgCheckIn}</p>
                   </div>
                   <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Attendance Rate</p>
+                    <p className="text-sm text-muted-foreground">{t('dashboard.attendanceRate')}</p>
                     <p className="text-lg font-semibold text-success">{weekly.attendanceRate}%</p>
                   </div>
                 </div>
@@ -973,7 +975,7 @@ const Attendance = () => {
           {/* Personal Attendance History */}
           <Card className="data-table">
             <CardHeader>
-              <CardTitle>My Attendance History</CardTitle>
+              <CardTitle>{t('pages.myHistory')}</CardTitle>
               <CardDescription>
                 Your recent attendance records
                 {historyPagination.total > 0

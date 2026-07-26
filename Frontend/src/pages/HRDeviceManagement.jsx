@@ -60,6 +60,7 @@ import {
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { useClientPagination } from '../hooks/useClientPagination';
 import ListPagination from '../components/ListPagination';
 import {
@@ -84,6 +85,7 @@ import {
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 const HRDeviceManagement = () => {
+  const { t } = useLanguage();
   const { canManageDeviceInventory, canAssignDevices } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState('table');
@@ -1108,22 +1110,20 @@ const HRDeviceManagement = () => {
               Inventory & assignments
             </div>
             <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
-              Device Management
+              {t('pages.devices')}
             </h1>
-            <p className="text-muted-foreground">
-              Track company hardware, assign to your team, and keep inventory ready.
-            </p>
+            <p className="text-muted-foreground">{t('pages.devicesDesc')}</p>
           </div>
           <div className="grid grid-cols-3 gap-3 w-full lg:w-auto lg:min-w-[22rem]">
             {[
-              { label: 'Assigned', value: assignedCount, tone: 'text-primary' },
+              { label: t('devices.assignedDevices'), value: assignedCount, tone: 'text-primary' },
               {
-                label: 'Available',
+                label: t('devices.availableDevices'),
                 value: availableCount,
                 tone: 'text-emerald-600 dark:text-emerald-400',
               },
               {
-                label: 'Maintenance',
+                label: t('devices.maintenance'),
                 value: maintenanceCount,
                 tone: 'text-amber-600 dark:text-amber-400',
               },
@@ -1149,7 +1149,7 @@ const HRDeviceManagement = () => {
         <div className="relative flex-1 max-w-xl">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search name, plate, serial, brand, or employee…"
+            placeholder={t('devices.searchPlaceholder')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10 h-11 rounded-xl bg-background"
@@ -1194,13 +1194,13 @@ const HRDeviceManagement = () => {
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="rounded-xl h-11">
                 <Download className="w-4 h-4 mr-2" />
-                Export Excel
+                {t('devices.exportExcel')}
                 <ChevronDown className="w-4 h-4 ml-2 opacity-70" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuItem onClick={() => handleExportDevices('all')}>
-                All devices
+                {t('devices.allDevices')}
                 <span className="ml-auto text-xs text-muted-foreground tabular-nums">
                   {normalizedDevices.length}
                 </span>
@@ -1208,7 +1208,7 @@ const HRDeviceManagement = () => {
               <DropdownMenuItem
                 onClick={() => handleExportDevices('assigned')}
               >
-                Assigned devices
+                {t('devices.assignedDevices')}
                 <span className="ml-auto text-xs text-muted-foreground tabular-nums">
                   {
                     normalizedDevices.filter(
@@ -1222,7 +1222,7 @@ const HRDeviceManagement = () => {
               <DropdownMenuItem
                 onClick={() => handleExportDevices('available')}
               >
-                Available devices
+                {t('devices.availableDevices')}
                 <span className="ml-auto text-xs text-muted-foreground tabular-nums">
                   {availableCount}
                 </span>
@@ -1234,13 +1234,13 @@ const HRDeviceManagement = () => {
               <DialogTrigger asChild>
                 <Button variant="outline" className="rounded-xl h-11">
                   <Plus className="w-4 h-4 mr-2" />
-                  Add device
+                  {t('devices.addDevice')}
                 </Button>
               </DialogTrigger>
             )}
             <DialogContent className="sm:max-w-[440px] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Add device to inventory</DialogTitle>
+                <DialogTitle>{t('devices.addDevice')}</DialogTitle>
                 <DialogDescription>
                   Create a new asset ready for assignment.
                 </DialogDescription>
@@ -1354,13 +1354,13 @@ const HRDeviceManagement = () => {
               <DialogTrigger asChild>
                 <Button className="btn-gradient rounded-xl h-11">
                   <UserPlus className="w-4 h-4 mr-2" />
-                  Assign device
+                  {t('devices.assignDevice')}
                 </Button>
               </DialogTrigger>
             )}
             <DialogContent className="sm:max-w-[440px]">
               <DialogHeader>
-                <DialogTitle>Assign device</DialogTitle>
+                <DialogTitle>{t('devices.assignDevice')}</DialogTitle>
                 <DialogDescription>
                   Link an available device to an employee.
                 </DialogDescription>
@@ -1674,7 +1674,7 @@ const HRDeviceManagement = () => {
                     onClick={() => setIsCreateDeviceOpen(true)}
                   >
                     <Plus className="w-4 h-4 mr-2" />
-                    Add device
+                    {t('devices.addDevice')}
                   </Button>
                 ) : null
               }
@@ -1890,7 +1890,7 @@ const HRDeviceManagement = () => {
                                 }}
                               >
                                 <UserPlus className="w-3.5 h-3.5 mr-1.5" />
-                                Assign device
+                                {t('devices.assignDevice')}
                               </Button>
                             )}
                           </div>
@@ -2011,7 +2011,7 @@ const HRDeviceManagement = () => {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                title="Assign device"
+                                title={t('devices.assignDevice')}
                                 onClick={() => {
                                   setAssignForm((p) => ({
                                     ...p,

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { useAuth } from "../contexts/AuthContext";
+import { useLanguage } from "../contexts/LanguageContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -59,6 +60,7 @@ function emptyForm() {
 }
 
 export default function SalaryAdvances() {
+  const { t } = useLanguage();
   const {
     canViewSalaryAdvances,
     canViewPayrollOps,
@@ -195,28 +197,16 @@ export default function SalaryAdvances() {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">
-            {isSelfView ? "My Salary Advances" : "Salary Advances"}
+            {isSelfView ? t('nav.myAdvances') : t('pages.advances')}
           </h1>
-          <p className="text-muted-foreground">
-            {isSelfView
-              ? "Advances recorded in your name — open ones will be deducted on a future payroll."
-              : (
-                <>
-                  Record advances when taken. Apply them on the{" "}
-                  <Link to="/salary" className="underline text-primary">
-                    payroll sheet
-                  </Link>{" "}
-                  so they reduce net pay.
-                </>
-              )}
-          </p>
+          <p className="text-muted-foreground">{t('pages.advancesDesc')}</p>
         </div>
         {canCreateUi && (
           <Dialog open={showAdd} onOpenChange={setShowAdd}>
             <DialogTrigger asChild>
               <Button className="btn-gradient">
                 <Plus className="w-4 h-4 mr-2" />
-                Record Advance
+                {t('advances.recordAdvance')}
               </Button>
             </DialogTrigger>
             <DialogContent>

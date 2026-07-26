@@ -1,13 +1,15 @@
 import Leave from "../models/Leave.js";
 import Employee from "../models/Employee.js";
-import Notification from "../models/Notification.js";
-import { emitToUser } from "../socket.js";
 import {
   canAccessEmployee,
   canManageTeam,
   getScopedEmployeeIds,
 } from "../utils/scope.js";
 import { logActivity } from "../utils/logActivity.js";
+import {
+  notifyLeaveSubmitted,
+  notifyLeaveReviewed,
+} from "../utils/notifyLeave.js";
 
 const VALID_TYPES = [
   "vacation",
@@ -101,6 +103,16 @@ export const createLeave = async (req, res) => {
         days,
       },
     });
+
+    try {
+      const employee = await Employee.findById(userId).select(
+        "name email sectorId subSectorId subSubSectorId"
+      );
+      notifyLeaveSubmitted({ employee, leave });
+    } catch (notifyErr) {
+      console.error("leave submit notify", notifyErr);
+    }
+
     return res.status(201).json({
       status: true,
       message: "Leave request submitted.",
@@ -212,28 +224,16 @@ export const reviewLeave = async (req, res) => {
     });
 
     try {
-      const recipientId = leave.employee;
-      const title =
-        status === "approved" ? "Leave approved" : "Leave rejected";
-      const description =
-        status === "approved"
-          ? `Your ${leave.type} leave request was approved.`
-          : `Your ${leave.type} leave request was rejected.`;
-      const row = await Notification.create({
-        recipient: recipientId,
-        kind: "leave_reviewed",
-        title,
-        description,
-        href: "/leave-requests",
-        meta: { leaveId: String(leave._id), status },
-      });
-      emitToUser(recipientId, "notify:personal", {
-        id: String(row._id),
-        kind: "leave_reviewed",
-        title,
-        description,
-        href: "/leave-requests",
-        createdAt: (row.createdAt || new Date()).toISOString(),
+      const empWithEmail =
+        employee.email != null
+          ? employee
+          : await Employee.findById(leave.employee).select("name email");
+      notifyLeaveReviewed({
+        employee: empWithEmail || employee,
+        leave,
+        status,
+        comments: leave.comments,
+        reviewedByName: req.user?.name || "",
       });
     } catch (notifyErr) {
       console.error("leave review notify", notifyErr);

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import { useLanguage } from "../contexts/LanguageContext";
 import { Button } from "../components/ui/button";
 import {
   Card,
@@ -99,6 +100,7 @@ function printPayslip(slip) {
 }
 
 const Payslips = () => {
+  const { t } = useLanguage();
   const { user, canManageHrOps } = useAuth();
   const [payslips, setPayslips] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -175,11 +177,9 @@ const Payslips = () => {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-foreground">
-            {canManageHrOps ? "Payslips" : "My Payslips"}
+            {canManageHrOps ? t('pages.payslips') : t('nav.myPayslips')}
           </h1>
-          <p className="text-muted-foreground">
-            Generated automatically when Org HR approves a payroll row
-          </p>
+          <p className="text-muted-foreground">{t('pages.payslipsDesc')}</p>
         </div>
         {selected && (
           <Button

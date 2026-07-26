@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../contexts/AuthContext";
+import { useLanguage } from "../contexts/LanguageContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -159,6 +160,7 @@ function badgeVariant(type) {
 }
 
 const Calendar = () => {
+  const { t } = useLanguage();
   const {
     user,
     canManageHrOps,
@@ -615,12 +617,8 @@ const Calendar = () => {
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Calendar</h1>
-          <p className="text-muted-foreground">
-            {canPost
-              ? "Post announcements for your scope — org, sector, or unit"
-              : "View announcements and events for your unit"}
-          </p>
+          <h1 className="text-3xl font-bold text-foreground">{t('pages.calendar')}</h1>
+          <p className="text-muted-foreground">{t('pages.calendarDesc')}</p>
         </div>
         {canPost && (
           <Dialog

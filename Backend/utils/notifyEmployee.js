@@ -1,6 +1,8 @@
 import { sendEmail } from "../Email/sendEmail.js";
 import getSalaryAdvanceMailOptions from "../Email/salaryAdvanceNotify.js";
+import getSalaryAdvanceCancelledMailOptions from "../Email/salaryAdvanceCancelledNotify.js";
 import getPayrollCreatedMailOptions from "../Email/payrollCreatedNotify.js";
+import getPayrollStatusMailOptions from "../Email/payrollStatusNotify.js";
 import { emitToUser } from "../socket.js";
 import Notification from "../models/Notification.js";
 
@@ -89,6 +91,50 @@ export async function notifySalaryAdvanceRecorded({
   });
 }
 
+export async function notifySalaryAdvanceCancelled({
+  employee,
+  advance,
+  cancelledByName,
+}) {
+  if (!employee?._id || !advance) return;
+
+  const amount = advance.amount;
+  const title = "Salary advance cancelled";
+  const description = `An advance of ${Number(amount || 0).toLocaleString()} ETB was cancelled${
+    cancelledByName ? ` by ${cancelledByName}` : ""
+  }.`;
+
+  if (employee.email) {
+    try {
+      await sendEmail(
+        getSalaryAdvanceCancelledMailOptions({
+          email: employee.email,
+          name: employee.name,
+          amount,
+          takenDate: advance.takenDate,
+          reason: advance.reason,
+          cancelledByName,
+        })
+      );
+    } catch (err) {
+      console.error("notifySalaryAdvanceCancelled email", err.message);
+    }
+  }
+
+  await persistAndEmit({
+    recipientId: employee._id,
+    kind: "salary_advance",
+    title,
+    description,
+    href: "/salary-advances",
+    meta: {
+      advanceId: String(advance._id || ""),
+      amount,
+      status: "cancelled",
+    },
+  });
+}
+
 export async function notifyPayrollCreated({
   employee,
   payroll,
@@ -129,6 +175,78 @@ export async function notifyPayrollCreated({
     href: "/salary",
     meta: {
       payrollId: String(payroll._id || payroll.id || ""),
+      netSalary: payroll.netSalary,
+    },
+  });
+}
+
+/** status: approved | rejected | paid */
+export async function notifyPayrollStatus({
+  employee,
+  payroll,
+  status,
+  decidedByName,
+  reason = "",
+}) {
+  if (!employee?._id || !payroll) return;
+  const statusKey = String(status || "").toLowerCase();
+
+  const titles = {
+    approved: "Payslip available",
+    rejected: "Payroll rejected",
+    paid: "Salary paid",
+  };
+  const descriptions = {
+    approved: `Your payroll was approved (net ${Number(
+      payroll.netSalary || 0
+    ).toLocaleString()} ETB). Your payslip is ready.`,
+    rejected: `Your payroll was rejected${reason ? `: ${reason}` : "."}`,
+    paid: `Your salary (net ${Number(
+      payroll.netSalary || 0
+    ).toLocaleString()} ETB) has been marked as paid.`,
+  };
+  const kinds = {
+    approved: "payslip_ready",
+    rejected: "payroll_rejected",
+    paid: "payroll_paid",
+  };
+  const hrefs = {
+    approved: "/payslips",
+    rejected: "/salary",
+    paid: "/payslips",
+  };
+
+  if (employee.email) {
+    try {
+      await sendEmail(
+        getPayrollStatusMailOptions({
+          email: employee.email,
+          name: employee.name,
+          status: statusKey,
+          payDate: payroll.payDate,
+          payrollMonth: payroll.payrollMonth,
+          basicSalary: payroll.basicSalary,
+          grossSalary: payroll.grossSalary,
+          salaryAdvance: payroll.salaryAdvance,
+          netSalary: payroll.netSalary,
+          reason,
+          decidedByName,
+        })
+      );
+    } catch (err) {
+      console.error("notifyPayrollStatus email", err.message);
+    }
+  }
+
+  await persistAndEmit({
+    recipientId: employee._id,
+    kind: kinds[statusKey] || "general",
+    title: titles[statusKey] || "Payroll update",
+    description: descriptions[statusKey] || "Your payroll was updated.",
+    href: hrefs[statusKey] || "/salary",
+    meta: {
+      payrollId: String(payroll._id || ""),
+      status: statusKey,
       netSalary: payroll.netSalary,
     },
   });

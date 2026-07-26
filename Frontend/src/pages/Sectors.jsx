@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useAuth } from "../contexts/AuthContext";
+import { useLanguage } from "../contexts/LanguageContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -123,6 +124,7 @@ function UnitNode({
 }
 
 export default function Sectors() {
+  const { t } = useLanguage();
   const {
     canManage,
     canManageOrgStructure,
@@ -358,15 +360,8 @@ export default function Sectors() {
     <div className="p-6 space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Organizational Sectors</h1>
-          <p className="text-muted-foreground">
-            {seesFullOrg
-              ? "Full organization structure — all sectors and units."
-              : isSectorLead
-                ? "Your sector and its sub-sectors / units only."
-                : "Units in your assigned area."}
-            {roleLabel ? ` (${roleLabel})` : ""}
-          </p>
+          <h1 className="text-2xl font-bold">{t('pages.sectors')}</h1>
+          <p className="text-muted-foreground">{t('pages.sectorsDesc')}</p>
           {canEdit && (
             <p className="text-xs text-muted-foreground mt-1">
               {canDelete

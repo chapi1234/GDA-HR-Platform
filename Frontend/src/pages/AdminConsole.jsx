@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useLanguage } from "../contexts/LanguageContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -23,6 +24,7 @@ const API_BASE = import.meta.env.VITE_API_URL;
 
 export default function AdminConsole() {
   const { isSuperAdmin, canAccessAdminConsole, canAssignOrgWide } = useAuth();
+  const { t } = useLanguage();
   const allowed = canAccessAdminConsole;
   const token = typeof window !== "undefined" ? localStorage.getItem("authToken") : null;
 
@@ -148,9 +150,9 @@ export default function AdminConsole() {
       <div className="p-6">
         <Card>
           <CardHeader>
-            <CardTitle>Access Restricted</CardTitle>
+            <CardTitle>{t("common.error")}</CardTitle>
             <CardDescription>
-              Only Super Admin or organization-wide Admin can open the Admin Console.
+              {t("pages.adminConsoleDesc")}
             </CardDescription>
           </CardHeader>
         </Card>
@@ -164,23 +166,23 @@ export default function AdminConsole() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Shield className="h-6 w-6 text-primary" />
-            Admin Console
+            {t("pages.adminConsole")}
           </h1>
           <p className="text-muted-foreground">
-            Organization overview and privileged account creation.
+            {t("pages.adminConsoleDesc")}
           </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" asChild>
             <Link to="/sectors">
               <Building2 className="w-4 h-4 mr-2" />
-              Manage Sectors
+              {t("pages.sectors")}
             </Link>
           </Button>
           <Button variant="outline" asChild>
             <Link to="/employees">
               <Users className="w-4 h-4 mr-2" />
-              All Employees
+              {t("pages.employees")}
             </Link>
           </Button>
         </div>

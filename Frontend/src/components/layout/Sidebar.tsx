@@ -5,6 +5,7 @@ import axios from 'axios'
 import { Link, useLocation } from "react-router-dom"
 import { useAuth } from "../../contexts/AuthContext"
 import { useTheme } from "../../contexts/ThemeContext"
+import { useLanguage } from "../../contexts/LanguageContext"
 import { Button } from "../ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar"
 import {
@@ -33,8 +34,15 @@ export const Sidebar = () => {
   const auth = useAuth()
   const { user, logout, roleLabel, canManage } = auth
   const { theme, setTheme } = useTheme()
+  const { t } = useLanguage()
   const location = useLocation()
   const [isCollapsed, setIsCollapsed] = useState(false)
+
+  const roleKey = `roles.${String(user?.role || "").toLowerCase()}`
+  const translatedRole = (() => {
+    const val = t(roleKey)
+    return val === roleKey ? roleLabel : val
+  })()
 
   const getDepartmentName = (dept) => {
     if (!dept) return ""
@@ -125,8 +133,8 @@ export const Sidebar = () => {
           </div>
           {!isCollapsed && (
             <div>
-              <h1 className="font-bold text-xl text-foreground">GammoDA</h1>
-              <p className="text-xs text-muted-foreground -mt-1">HRM System</p>
+              <h1 className="font-bold text-xl text-foreground">{t("app.name")}</h1>
+              <p className="text-xs text-muted-foreground -mt-1">{t("app.hrm")}</p>
             </div>
           )}
         </Link>
@@ -151,10 +159,10 @@ export const Sidebar = () => {
                       ? "bg-sidebar-primary text-sidebar-primary-foreground"
                       : "text-sidebar-foreground hover:bg-sidebar-accent"
                   }`}
-                  title={isCollapsed ? item.label : undefined}
+                  title={isCollapsed ? t(item.labelKey) : undefined}
                 >
                   <Icon className="w-5 h-5 flex-shrink-0 block" />
-                  {!isCollapsed && <span className="text-sm font-medium">{item.label}</span>}
+                  {!isCollapsed && <span className="text-sm font-medium">{t(item.labelKey)}</span>}
                 </Link>
               </li>
             );
@@ -166,7 +174,7 @@ export const Sidebar = () => {
       <div className="border-t border-sidebar-border p-4 space-y-3">
         <div className={`flex items-center ${isCollapsed ? "justify-center" : "justify-between"} gap-2`}>
           {!isCollapsed && (
-            <span className="text-sm text-sidebar-foreground px-1">Notifications</span>
+            <span className="text-sm text-sidebar-foreground px-1">{t("layout.notifications")}</span>
           )}
           <NotificationBell align="end" side="top" />
         </div>
@@ -178,10 +186,10 @@ export const Sidebar = () => {
           className={`w-full text-sidebar-foreground hover:bg-sidebar-accent ${
             isCollapsed ? "justify-center px-0" : "justify-start"
           }`}
-          title={`Current theme: ${theme}`}
+          title={t("layout.themeCurrent", { theme })}
         >
           <ThemeIcon className="w-5 h-5 flex-shrink-0 block" />
-          {!isCollapsed && <span className="text-sm ml-2">Theme</span>}
+          {!isCollapsed && <span className="text-sm ml-2">{t("layout.theme")}</span>}
         </Button>
 
         <DropdownMenu>
@@ -202,7 +210,7 @@ export const Sidebar = () => {
                 <div className="flex-1 text-left ml-2 min-w-0">
                   <p className="text-sm font-medium truncate">{user?.name}</p>
                   <Badge variant={canManage ? "default" : "secondary"} className="text-xs mt-1">
-                    {roleLabel}
+                    {translatedRole}
                   </Badge>
                 </div>
               )}
@@ -213,26 +221,26 @@ export const Sidebar = () => {
               <p className="text-sm font-medium">{user?.name}</p>
               <p className="text-xs text-muted-foreground">{user?.email}</p>
               <Badge variant="secondary" className="text-xs mt-1">
-                {unitLeaf(user?.unitPath) || deptName || getDepartmentName(user?.department) || roleLabel}
+                {unitLeaf(user?.unitPath) || deptName || getDepartmentName(user?.department) || translatedRole}
               </Badge>
             </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
               <Link to="/profile" className="flex items-center">
                 <User className="w-4 h-4 mr-2" />
-                Profile
+                {t("layout.profile")}
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link to="/settings" className="flex items-center">
                 <Settings className="w-4 h-4 mr-2" />
-                Settings
+                {t("layout.settings")}
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout} className="text-destructive">
               <LogOut className="w-4 h-4 mr-2" />
-              Sign Out
+              {t("layout.signOut")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -250,7 +258,7 @@ export const Sidebar = () => {
               isCollapsed ? "rotate-90" : "-rotate-90"
             }`}
           />
-          {!isCollapsed && <span className="text-sm ml-2">Collapse</span>}
+          {!isCollapsed && <span className="text-sm ml-2">{t("layout.collapse")}</span>}
         </Button>
       </div>
     </aside>
