@@ -56,7 +56,16 @@ function emptyForm() {
     amount: "",
     takenDate: new Date().toISOString().split("T")[0],
     reason: "",
+    repaymentType: "full",
+    installmentMonths: "4",
   };
+}
+
+function monthlyPreview(amount, months) {
+  const a = Number(amount);
+  const m = Math.floor(Number(months));
+  if (!Number.isFinite(a) || a <= 0 || !Number.isFinite(m) || m < 2) return null;
+  return Math.ceil((a / m) * 100) / 100;
 }
 
 export default function SalaryAdvances() {
@@ -138,18 +147,32 @@ export default function SalaryAdvances() {
       toast.error("Employee, amount, and date are required");
       return;
     }
+    if (form.repaymentType === "installment") {
+      const months = Math.floor(Number(form.installmentMonths));
+      if (!Number.isFinite(months) || months < 2) {
+        toast.error("Installment plan needs at least 2 months");
+        return;
+      }
+    }
     try {
-      await axios.post(
-        `${API_URL}/api/salary-advances`,
-        {
-          employee: form.employeeId,
-          amount: Number(form.amount),
-          takenDate: form.takenDate,
-          reason: form.reason,
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
+      const payload = {
+        employee: form.employeeId,
+        amount: Number(form.amount),
+        takenDate: form.takenDate,
+        reason: form.reason,
+        repaymentType: form.repaymentType || "full",
+      };
+      if (form.repaymentType === "installment") {
+        payload.installmentMonths = Math.floor(Number(form.installmentMonths));
+      }
+      await axios.post(`${API_URL}/api/salary-advances`, payload, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      toast.success(
+        form.repaymentType === "installment"
+          ? "Installment advance recorded — monthly portion will be deducted on payroll"
+          : "Advance recorded — will be deducted on next payroll"
       );
-      toast.success("Advance recorded — will be deducted on next payroll");
       setForm(emptyForm());
       setShowAdd(false);
       load();
@@ -209,12 +232,12 @@ export default function SalaryAdvances() {
                 {t('advances.recordAdvance')}
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle>Record salary advance</DialogTitle>
                 <DialogDescription>
-                  Log the amount when the employee takes it. It stays open until
-                  included in an approved payroll.
+                  Choose full recovery on the next payroll, or spread repayment
+                  over several months.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-3">
@@ -242,10 +265,58 @@ export default function SalaryAdvances() {
                   <Label>Amount *</Label>
                   <Input
                     type="number"
+                    min="1"
                     value={form.amount}
                     onChange={setField("amount")}
                   />
                 </div>
+                <div>
+                  <Label>Repayment type *</Label>
+                  <Select
+                    value={form.repaymentType}
+                    onValueChange={(v) =>
+                      setForm((p) => ({ ...p, repaymentType: v }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="full">
+                        Full — deduct all on next payroll
+                      </SelectItem>
+                      <SelectItem value="installment">
+                        Installment — split across months
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {form.repaymentType === "installment" && (
+                  <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+                    <div>
+                      <Label>Number of months *</Label>
+                      <Input
+                        type="number"
+                        min="2"
+                        max="60"
+                        value={form.installmentMonths}
+                        onChange={setField("installmentMonths")}
+                      />
+                    </div>
+                    {monthlyPreview(form.amount, form.installmentMonths) !=
+                      null && (
+                      <p className="text-sm text-muted-foreground">
+                        About{" "}
+                        <span className="font-semibold text-foreground">
+                          {money(
+                            monthlyPreview(form.amount, form.installmentMonths)
+                          )}
+                        </span>{" "}
+                        deducted each payroll until the balance is cleared.
+                      </p>
+                    )}
+                  </div>
+                )}
                 <div>
                   <Label>Date taken *</Label>
                   <Input
@@ -311,6 +382,7 @@ export default function SalaryAdvances() {
             <TableRow>
               <TableHead>Employee</TableHead>
               <TableHead>Amount</TableHead>
+              <TableHead>Plan</TableHead>
               <TableHead>Taken</TableHead>
               <TableHead>Reason</TableHead>
               <TableHead>Status</TableHead>
@@ -326,7 +398,31 @@ export default function SalaryAdvances() {
                     {row.employeeId || ""}
                   </p>
                 </TableCell>
-                <TableCell className="font-semibold">{money(row.amount)}</TableCell>
+                <TableCell>
+                  <p className="font-semibold">{money(row.amount)}</p>
+                  {row.remainingAmount != null &&
+                    Number(row.remainingAmount) !== Number(row.amount) && (
+                      <p className="text-xs text-muted-foreground">
+                        Remaining {money(row.remainingAmount)}
+                      </p>
+                    )}
+                </TableCell>
+                <TableCell className="text-sm">
+                  {row.repaymentType === "installment" ? (
+                    <div>
+                      <p>
+                        {row.installmentMonths} mo ·{" "}
+                        {money(row.monthlyInstallment)}/mo
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Paid {Number(row.installmentsPaid || 0)}/
+                        {Number(row.installmentMonths || 0)}
+                      </p>
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">Full (next payroll)</span>
+                  )}
+                </TableCell>
                 <TableCell>
                   {row.takenDate
                     ? new Date(row.takenDate).toLocaleDateString()

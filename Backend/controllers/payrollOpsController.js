@@ -6,7 +6,7 @@ import Notification from "../models/Notification.js";
 import { getScopedEmployeeIds } from "../utils/scope.js";
 import { isOrgWide, ROLES } from "../utils/roles.js";
 import { computePayrollSheet } from "../utils/payrollSheet.js";
-import { applyAdvancesToPayroll } from "../utils/advanceApply.js";
+import { applyAdvancesToPayroll, suggestedApplyAmount } from "../utils/advanceApply.js";
 import {
   notifyPayrollCreated,
   notifyPayrollStatus,
@@ -17,6 +17,7 @@ import {
   payrollMonthKey,
   monthLabelFromKey,
   monthRangeFromKey,
+  parsePayDateInput,
 } from "../utils/payrollMonth.js";
 import {
   pushAudit,
@@ -192,7 +193,9 @@ export const batchCreatePayroll = async (req, res) => {
     if (lockErr) return res.status(403).json({ status: false, message: lockErr });
 
     const range = monthRangeFromKey(month);
-    const payDate = req.body.payDate ? new Date(req.body.payDate) : range.end;
+    const payDate = req.body.payDate
+      ? parsePayDateInput(req.body.payDate)
+      : range.end;
 
     let employees = [];
     if (req.user.role === ROLES.MANAGER && req.user.subSectorId) {
@@ -269,9 +272,14 @@ export const batchCreatePayroll = async (req, res) => {
       await payroll.save();
 
       if (advanceIds.length) {
+        const advanceAmounts = {};
+        for (const a of openAdvances) {
+          advanceAmounts[String(a._id)] = suggestedApplyAmount(a);
+        }
         const advanceResult = await applyAdvancesToPayroll({
           employeeId: emp._id,
           advanceIds,
+          advanceAmounts,
           payrollId: payroll._id,
         });
         if (!advanceResult.error && advanceResult.advanceIds.length) {
