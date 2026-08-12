@@ -71,6 +71,9 @@ export async function notifySalaryAdvanceRecorded({
           takenDate,
           reason,
           preparedByName,
+          repaymentType: advance?.repaymentType || "full",
+          installmentMonths: advance?.installmentMonths,
+          monthlyInstallment: advance?.monthlyInstallment,
         })
       );
     } catch (err) {

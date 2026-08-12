@@ -5,9 +5,37 @@ function n(v) {
   return Number.isFinite(x) ? Math.round(x * 100) / 100 : 0;
 }
 
+/** Round up to 2 decimals so installments cover the full amount. */
+export function computeMonthlyInstallment(amount, months) {
+  const a = n(amount);
+  const m = Math.max(2, Math.floor(Number(months) || 0));
+  if (a <= 0 || m < 2) return 0;
+  return Math.ceil((a / m) * 100) / 100;
+}
+
 /**
- * Apply open advances (full remaining or partial via advanceAmounts map).
- * advanceAmounts: { [advanceId]: number } optional installment amounts.
+ * Default amount to deduct this payroll for an open advance.
+ * - full: entire remaining balance
+ * - installment: monthlyInstallment (or remaining if smaller)
+ */
+export function suggestedApplyAmount(row) {
+  const remaining =
+    row.remainingAmount != null ? n(row.remainingAmount) : n(row.amount);
+  if (remaining <= 0) return 0;
+  if (row.repaymentType === "installment") {
+    const monthly =
+      row.monthlyInstallment != null
+        ? n(row.monthlyInstallment)
+        : computeMonthlyInstallment(row.amount, row.installmentMonths);
+    if (monthly <= 0) return remaining;
+    return n(Math.min(remaining, monthly));
+  }
+  return remaining;
+}
+
+/**
+ * Apply open advances (full remaining, monthly installment, or override via advanceAmounts).
+ * advanceAmounts: { [advanceId]: number } optional explicit amounts.
  */
 export async function applyAdvancesToPayroll({
   employeeId,
@@ -43,7 +71,7 @@ export async function applyAdvancesToPayroll({
     const requested =
       advanceAmounts[String(row._id)] != null
         ? n(advanceAmounts[String(row._id)])
-        : remaining;
+        : suggestedApplyAmount(row);
     const applyAmt = Math.min(remaining, Math.max(0, requested));
     if (applyAmt <= 0) {
       return { error: `Invalid apply amount for advance ${row._id}` };
@@ -89,6 +117,13 @@ export async function recoverAdvancesForPayroll(payrollId) {
   });
   for (const row of rows) {
     const rem = n(row.remainingAmount || 0);
+    const paidSlice = n(row.appliedAmount || 0);
+    if (paidSlice > 0) {
+      row.installmentsPaid = Math.max(
+        0,
+        Number(row.installmentsPaid || 0) + 1
+      );
+    }
     if (rem <= 0) {
       row.status = "recovered";
       row.recoveredAt = new Date();

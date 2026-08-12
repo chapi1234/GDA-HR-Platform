@@ -39,6 +39,7 @@ const EmployeeSchema = new mongoose.Schema(
     dateOfBirth: Date,
     profileImage: { type: String },
     address: { type: String },
+    nationality: { type: String, default: "Ethiopian" },
     bio: { type: String },
     skills: { type: String },
 

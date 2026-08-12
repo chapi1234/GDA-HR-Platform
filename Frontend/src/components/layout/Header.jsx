@@ -23,6 +23,7 @@ import {
   Sun,
   Moon,
   Monitor,
+  CreditCard,
 } from 'lucide-react';
 import logo from '../../assets/download.jpg';
 import { getNavigationItems } from './navItems';
@@ -200,6 +201,12 @@ export const Header = () => {
                   <Link to="/profile" className="flex items-center">
                     <User className="w-4 h-4 mr-2" />
                     {t("layout.profile")}
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/my-id" className="flex items-center">
+                    <CreditCard className="w-4 h-4 mr-2" />
+                    {t("layout.myId")}
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
