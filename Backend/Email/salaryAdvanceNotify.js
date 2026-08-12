@@ -19,55 +19,27 @@ export default function getSalaryAdvanceMailOptions({
   takenDate,
   reason,
   preparedByName,
-  repaymentType,
-  installmentMonths,
-  monthlyInstallment,
 }) {
   const advancesUrl = `${getFrontendUrl()}/salary-advances`;
   const dateLabel = takenDate
     ? new Date(takenDate).toLocaleDateString()
     : "—";
 
-  const isInstallment = repaymentType === "installment";
-  const planRows = [
-    { label: "Amount", value: formatEtb(amount) },
-    {
-      label: "Repayment",
-      value: isInstallment
-        ? `Installment — ${Number(installmentMonths)} month(s)`
-        : "Full amount on next payroll",
-    },
-  ];
-  if (isInstallment) {
-    planRows.push({
-      label: "Monthly deduction",
-      value: formatEtb(monthlyInstallment),
-    });
-  }
-  planRows.push(
-    { label: "Date taken", value: escapeHtml(dateLabel) },
-    { label: "Reason", value: escapeHtml(reason || "Not specified") },
-    {
-      label: "Recorded by",
-      value: escapeHtml(preparedByName || "Manager / HR"),
-    }
-  );
-
   const contentHtml = `
     <p>Dear <strong>${escapeHtml(name)}</strong>,</p>
     <p>
       A <strong>salary advance</strong> has been recorded under your name in the GammoDA HR System.
-      ${
-        isInstallment
-          ? `It will be recovered in about <strong>${escapeHtml(
-              String(installmentMonths)
-            )} monthly payroll deductions</strong> of approximately <strong>${formatEtb(
-              monthlyInstallment
-            )}</strong> until the balance is cleared.`
-          : `This amount is expected to be deducted from your <strong>next payroll</strong> unless cancelled.`
-      }
+      This amount is expected to be deducted from a future payroll unless cancelled.
     </p>
-    ${detailPanel("Advance details", planRows)}
+    ${detailPanel("Advance details", [
+      { label: "Amount", value: formatEtb(amount) },
+      { label: "Date taken", value: escapeHtml(dateLabel) },
+      { label: "Reason", value: escapeHtml(reason || "Not specified") },
+      {
+        label: "Recorded by",
+        value: escapeHtml(preparedByName || "Manager / HR"),
+      },
+    ])}
     <p>
       If you did not request this advance or the details look wrong, contact your Manager or Org HR immediately.
     </p>

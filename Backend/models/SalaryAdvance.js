@@ -2,13 +2,7 @@ import mongoose from "mongoose";
 
 /**
  * Salary advance recorded when the employee takes money before payday.
- *
- * Types:
- * - full: entire remaining balance deducted on next payroll
- * - installment: fixed monthly portion over installmentMonths
- *
- * Status: open → applied (linked to pending payroll) → recovered (fully paid)
- *          or back to open after approve if remainingAmount > 0
+ * open → applied (linked to pending payroll) → recovered (payroll approved)
  */
 const salaryAdvanceSchema = new mongoose.Schema(
   {
@@ -38,26 +32,10 @@ const salaryAdvanceSchema = new mongoose.Schema(
       default: null,
     },
     amount: { type: Number, required: true, min: 0 },
-    /** Still to recover */
+    /** Still to recover (supports installments across months) */
     remainingAmount: { type: Number, min: 0 },
     /** Amount linked on the current applied payroll */
     appliedAmount: { type: Number, default: 0 },
-    /**
-     * full = recover all remaining on next payroll
-     * installment = recover monthlyInstallment each payroll until done
-     */
-    repaymentType: {
-      type: String,
-      enum: ["full", "installment"],
-      default: "full",
-      index: true,
-    },
-    /** Number of months to spread repayment (installment only) */
-    installmentMonths: { type: Number, default: null, min: 2 },
-    /** Planned deduction per payroll for installment advances */
-    monthlyInstallment: { type: Number, default: null, min: 0 },
-    /** How many payroll cycles have successfully recovered a slice */
-    installmentsPaid: { type: Number, default: 0, min: 0 },
     takenDate: { type: Date, required: true },
     reason: { type: String, default: "" },
     status: {

@@ -77,7 +77,6 @@ function mapEmployee(emp) {
     avatar:
       emp.profileImage ||
       `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.name)}&background=3b82f6&color=fff`,
-    profileImage: emp.profileImage || "",
     address: emp.address,
     employeeId: emp.employeeId || "",
     role: emp.role || "employee",
@@ -1012,7 +1011,6 @@ export const profileUpload = async (req, res) => {
       joinDate: saved.startDate ? saved.startDate.toISOString().split('T')[0] : '',
       status: saved.status,
       avatar: saved.profileImage || `https://ui-avatars.com/api/?name=${encodeURIComponent(saved.name)}&background=3b82f6&color=fff`,
-      profileImage: saved.profileImage || "",
       address: saved.address,
       employeeId: saved.employeeId || '',
       role: saved.role || 'employee',

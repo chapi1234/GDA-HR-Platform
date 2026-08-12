@@ -15,7 +15,7 @@ import {
   notifyPayrollCreated,
   notifyPayrollStatus,
 } from "../utils/notifyEmployee.js";
-import { payrollMonthKey, monthLabelFromKey, monthRangeFromKey, parsePayDateInput } from "../utils/payrollMonth.js";
+import { payrollMonthKey, monthLabelFromKey, monthRangeFromKey } from "../utils/payrollMonth.js";
 import { upsertPayslipFromPayroll } from "../utils/payslipFromPayroll.js";
 import {
   pushAudit,
@@ -171,18 +171,13 @@ export const createPayroll = async (req, res) => {
     }
 
     const amounts = sheetPayloadFromBody(req.body);
-    const pay = parsePayDateInput(payDate);
-    if (!pay) {
-      return res.status(400).json({ status: false, message: "Invalid payDate" });
-    }
-    const monthKey = payrollMonthKey(payDate) || payrollMonthKey(pay);
-    const monthBounds = monthRangeFromKey(monthKey);
-    const start = periodStart
-      ? parsePayDateInput(periodStart)
-      : monthBounds?.start;
-    const end = periodEnd ? parsePayDateInput(periodEnd) : monthBounds?.end;
+    const pay = new Date(payDate);
+    const start = periodStart ? new Date(periodStart) : new Date(pay.getFullYear(), pay.getMonth(), 1);
+    const end = periodEnd
+      ? new Date(periodEnd)
+      : new Date(pay.getFullYear(), pay.getMonth() + 1, 0);
 
-    const dup = await assertNoDuplicateMonth(empDoc._id, payDate);
+    const dup = await assertNoDuplicateMonth(empDoc._id, pay);
     if (dup.error) {
       return res.status(409).json({ status: false, message: dup.error });
     }
@@ -227,7 +222,7 @@ export const createPayroll = async (req, res) => {
       subSubSectorId: empDoc.subSubSectorId || null,
       payDate: pay,
       payPeriod: { startDate: start, endDate: end },
-      payrollMonth: monthKey || dup.month,
+      payrollMonth: dup.month,
       ...amounts,
       advanceIds: [],
       status: "pending",
@@ -419,33 +414,17 @@ export const updatePayroll = async (req, res) => {
 
     Object.assign(payroll, amounts);
     if (req.body.payDate) {
-      const nextPay = parsePayDateInput(req.body.payDate);
-      if (!nextPay) {
-        return res.status(400).json({ status: false, message: "Invalid payDate" });
-      }
-      const nextMonth =
-        payrollMonthKey(req.body.payDate) || payrollMonthKey(nextPay);
-      const dup = await assertNoDuplicateMonth(
-        payroll.employee,
-        req.body.payDate,
-        payroll._id
-      );
+      const nextPay = new Date(req.body.payDate);
+      const dup = await assertNoDuplicateMonth(payroll.employee, nextPay, payroll._id);
       if (dup.error) {
         return res.status(409).json({ status: false, message: dup.error });
       }
-      const nextLockErr = await assertMonthWritable(nextMonth || dup.month);
+      const nextLockErr = await assertMonthWritable(dup.month);
       if (nextLockErr) {
         return res.status(403).json({ status: false, message: nextLockErr });
       }
       payroll.payDate = nextPay;
-      payroll.payrollMonth = nextMonth || dup.month;
-      const bounds = monthRangeFromKey(payroll.payrollMonth);
-      if (bounds && !req.body.periodStart && !req.body.periodEnd) {
-        payroll.payPeriod = {
-          startDate: bounds.start,
-          endDate: bounds.end,
-        };
-      }
+      payroll.payrollMonth = dup.month;
     } else if (!payroll.payrollMonth) {
       payroll.payrollMonth = payrollMonthKey(payroll.payDate);
     }
@@ -453,10 +432,10 @@ export const updatePayroll = async (req, res) => {
     if (req.body.periodStart || req.body.periodEnd) {
       payroll.payPeriod = {
         startDate: req.body.periodStart
-          ? parsePayDateInput(req.body.periodStart)
+          ? new Date(req.body.periodStart)
           : payroll.payPeriod.startDate,
         endDate: req.body.periodEnd
-          ? parsePayDateInput(req.body.periodEnd)
+          ? new Date(req.body.periodEnd)
           : payroll.payPeriod.endDate,
       };
     }

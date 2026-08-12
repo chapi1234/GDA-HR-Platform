@@ -23,7 +23,6 @@ import SalaryAdvances from './pages/SalaryAdvances';
 import LeaveRequests from './pages/LeaveRequests';
 import Recruitment from './pages/Recruitment';
 import Profile from './pages/Profile';
-import MyId from './pages/MyId';
 import Chat from './pages/Chat';
 import Settings from './pages/Settings';
 import Calendar from './pages/Calendar';
@@ -192,14 +191,6 @@ const AppRoutes = () => {
             <Profile />
           </ProtectedRoute>
         } 
-      />
-      <Route
-        path="/my-id"
-        element={
-          <ProtectedRoute>
-            <MyId />
-          </ProtectedRoute>
-        }
       />
       <Route
         path="/chat"

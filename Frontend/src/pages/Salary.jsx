@@ -119,11 +119,6 @@ function computeSheet(form) {
   };
 }
 
-function todayYmd() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 function emptyForm() {
   return {
     employeeId: "",
@@ -137,7 +132,7 @@ function emptyForm() {
     membershipFee: "",
     salaryAdvance: "",
     other: "",
-    payDate: todayYmd(),
+    payDate: new Date().toISOString().split("T")[0],
     notes: "",
     advanceIds: [],
   };
@@ -148,30 +143,6 @@ function normalizeAdvanceIds(list) {
   return list
     .map((a) => String(a?._id || a?.id || a))
     .filter((id) => /^[0-9a-fA-F]{24}$/.test(id));
-}
-
-/** This-payroll deduction: monthly slice for installments, else full remaining. */
-function suggestedAdvanceDeduction(adv) {
-  if (adv?.suggestedDeduction != null && Number(adv.suggestedDeduction) >= 0) {
-    return n(adv.suggestedDeduction);
-  }
-  const remaining = n(adv?.remainingAmount ?? adv?.amount ?? 0);
-  if (adv?.repaymentType === "installment") {
-    const monthly = n(adv?.monthlyInstallment || 0);
-    if (monthly > 0) return Math.min(remaining, monthly);
-  }
-  return remaining;
-}
-
-function buildAdvanceAmountsMap(openAdvances, advanceIds) {
-  const selected = new Set((advanceIds || []).map(String));
-  const map = {};
-  for (const adv of openAdvances || []) {
-    const id = String(adv.id || adv._id);
-    if (!selected.has(id)) continue;
-    map[id] = suggestedAdvanceDeduction(adv);
-  }
-  return map;
 }
 
 function mapPayroll(p) {
@@ -195,7 +166,7 @@ function mapPayroll(p) {
     other: p.other ?? 0,
     totalDeduction: p.totalDeduction ?? p.deductions ?? 0,
     netSalary: p.netSalary ?? 0,
-    payDate: p.payDate ? String(p.payDate).slice(0, 10) : "",
+    payDate: p.payDate ? new Date(p.payDate).toISOString().split("T")[0] : "",
     status: p.status || "pending",
     preparedByName: p.preparedBy?.name || null,
     approvedByName: p.approvedBy?.name || null,
@@ -238,7 +209,7 @@ function SheetFields({
       const ids = Array.from(current);
       const total = openAdvances
         .filter((a) => ids.includes(String(a.id || a._id)))
-        .reduce((s, a) => s + suggestedAdvanceDeduction(a), 0);
+        .reduce((s, a) => s + Number(a.amount || 0), 0);
       return {
         ...prev,
         advanceIds: ids,
@@ -355,18 +326,13 @@ function SheetFields({
                       onChange={() => toggleAdvance(id)}
                     />
                     <span className="flex-1">
-                      <span className="font-medium">
-                        {money(suggestedAdvanceDeduction(adv))}
-                      </span>
+                      <span className="font-medium">{money(adv.amount)}</span>
                       <span className="text-muted-foreground">
                         {" "}
-                        this payroll
-                        {adv.repaymentType === "installment"
-                          ? ` · installment ${money(adv.monthlyInstallment)}/mo of ${money(adv.amount)} (${adv.installmentMonths} mo)`
-                          : ` · of ${money(adv.amount)} (full)`}
+                        —{" "}
                         {adv.takenDate
-                          ? ` — ${new Date(adv.takenDate).toLocaleDateString()}`
-                          : ""}
+                          ? new Date(adv.takenDate).toLocaleDateString()
+                          : "—"}
                         {adv.reason ? ` · ${adv.reason}` : ""}
                         {adv.remainingAmount != null &&
                         Number(adv.remainingAmount) !== Number(adv.amount)
@@ -413,9 +379,6 @@ function SheetFields({
             value={form.payDate}
             onChange={setField("payDate")}
           />
-          <p className="text-xs text-muted-foreground mt-1">
-            Defaults to today — change if the pay date is different.
-          </p>
         </div>
         <div>
           <Label>Notes</Label>
@@ -539,7 +502,7 @@ const Salary = () => {
       if ((prev.advanceIds || []).length) return prev;
       const ids = openAdvances.map((a) => String(a.id || a._id));
       const total = openAdvances.reduce(
-        (s, a) => s + suggestedAdvanceDeduction(a),
+        (s, a) => s + Number(a.remainingAmount ?? a.amount ?? 0),
         0
       );
       return {
@@ -594,16 +557,10 @@ const Salary = () => {
 
   const payDateMonthKey = (payDate) => {
     if (!payDate) return null;
-    const raw = String(payDate).trim();
-    const match = raw.match(/^(\d{4})-(\d{2})/);
-    if (match) return `${match[1]}-${match[2]}`;
     const pd = new Date(payDate);
     if (Number.isNaN(pd.getTime())) return null;
-    return `${pd.getUTCFullYear()}-${String(pd.getUTCMonth() + 1).padStart(2, "0")}`;
+    return `${pd.getFullYear()}-${String(pd.getMonth() + 1).padStart(2, "0")}`;
   };
-
-  const salaryMonthKey = (salary) =>
-    salary?.payrollMonth || payDateMonthKey(salary?.payDate);
 
   const selectedMonthLabel = (() => {
     const [y, m] = selectedMonth.split("-").map(Number);
@@ -615,7 +572,7 @@ const Salary = () => {
   })();
 
   const filteredSalaries = salaries.filter((salary) => {
-    const matchesMonth = salaryMonthKey(salary) === selectedMonth;
+    const matchesMonth = payDateMonthKey(salary.payDate) === selectedMonth;
     if (!matchesMonth) return false;
     if (!isOpsView) return true;
     const q = searchTerm.toLowerCase();
@@ -634,10 +591,9 @@ const Salary = () => {
     salaries.length,
   ]);
 
-  const buildPayload = (form, openAdvancesList = []) => {
+  const buildPayload = (form) => {
     const c = computeSheet(form);
     const advanceIds = normalizeAdvanceIds(form.advanceIds);
-    const advanceAmounts = buildAdvanceAmountsMap(openAdvancesList, advanceIds);
     return {
       employee: form.employeeId || undefined,
       basicSalary: c.basicSalary,
@@ -653,7 +609,6 @@ const Salary = () => {
       payDate: form.payDate,
       notes: form.notes || "",
       advanceIds,
-      advanceAmounts,
     };
   };
 
@@ -666,22 +621,14 @@ const Salary = () => {
       const token = localStorage.getItem("authToken");
       const res = await axios.post(
         `${API_URL}/api/payroll`,
-        buildPayload(newSalary, openAdvances),
+        buildPayload(newSalary),
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (res.data?.data) {
-        const mapped = mapPayroll(res.data.data);
-        setSalaries((prev) => [mapped, ...prev.filter((s) => s.id !== mapped.id)]);
-        // Jump month filter to the payroll's month so the new row is visible
-        const month = salaryMonthKey(mapped);
-        if (month) setSelectedMonth(month);
+        setSalaries([mapPayroll(res.data.data), ...salaries]);
         setNewSalary(emptyForm());
         setShowAddDialog(false);
-        toast.success(
-          month
-            ? `Payroll created for ${month} — pending Org HR approval`
-            : "Payroll created — pending Org HR approval"
-        );
+        toast.success("Payroll created — pending Org HR approval");
       }
     } catch (err) {
       toast.error(err.response?.data?.message || "Error creating payroll");
@@ -697,7 +644,7 @@ const Salary = () => {
       const token = localStorage.getItem("authToken");
       const res = await axios.patch(
         `${API_URL}/api/payroll/${editingSalary.id}`,
-        buildPayload(editingSalary, editOpenAdvances),
+        buildPayload(editingSalary),
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (res.data?.data) {
@@ -961,8 +908,13 @@ const Salary = () => {
   const openAddDialog = (open) => {
     setShowAddDialog(open);
     if (open) {
-      // Default pay date to today; user can still pick another date
-      setNewSalary({ ...emptyForm(), payDate: todayYmd() });
+      // Default pay date to the 1st of the selected payroll month
+      const [y, m] = selectedMonth.split("-").map(Number);
+      const defaultPay =
+        y && m
+          ? `${selectedMonth}-01`
+          : new Date().toISOString().split("T")[0];
+      setNewSalary((prev) => ({ ...emptyForm(), payDate: defaultPay }));
     }
   };
 

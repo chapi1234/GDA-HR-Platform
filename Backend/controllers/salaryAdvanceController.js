@@ -7,7 +7,6 @@ import {
   notifySalaryAdvanceCancelled,
 } from "../utils/notifyEmployee.js";
 import { logActivity } from "../utils/logActivity.js";
-import { computeMonthlyInstallment } from "../utils/advanceApply.js";
 
 function actorId(user) {
   return user?._id || user?.id;
@@ -42,17 +41,6 @@ function serializeAdvance(doc) {
   if (!doc) return doc;
   const obj = typeof doc.toObject === "function" ? doc.toObject() : { ...doc };
   obj.id = obj._id;
-  const remaining =
-    obj.remainingAmount != null ? Number(obj.remainingAmount) : Number(obj.amount || 0);
-  if (obj.repaymentType === "installment") {
-    const monthly = Number(obj.monthlyInstallment || 0);
-    obj.suggestedDeduction = Math.min(
-      remaining,
-      monthly > 0 ? monthly : remaining
-    );
-  } else {
-    obj.suggestedDeduction = remaining;
-  }
   return obj;
 }
 
@@ -65,8 +53,7 @@ export const createAdvance = async (req, res) => {
       });
     }
 
-    const { employee, employeeId, amount, takenDate, reason, repaymentType, installmentMonths } =
-      req.body;
+    const { employee, employeeId, amount, takenDate, reason } = req.body;
     if ((!employee && !employeeId) || amount == null || !takenDate) {
       return res.status(400).json({
         status: false,
@@ -78,29 +65,6 @@ export const createAdvance = async (req, res) => {
         status: false,
         message: "Amount must be greater than zero",
       });
-    }
-
-    const type =
-      String(repaymentType || "full").toLowerCase() === "installment"
-        ? "installment"
-        : "full";
-    let months = null;
-    let monthly = null;
-    if (type === "installment") {
-      months = Math.floor(Number(installmentMonths));
-      if (!Number.isFinite(months) || months < 2) {
-        return res.status(400).json({
-          status: false,
-          message: "Installment advances require at least 2 months",
-        });
-      }
-      if (months > 60) {
-        return res.status(400).json({
-          status: false,
-          message: "Installment months cannot exceed 60",
-        });
-      }
-      monthly = computeMonthlyInstallment(amount, months);
     }
 
     let empDoc = null;
@@ -140,10 +104,6 @@ export const createAdvance = async (req, res) => {
       amount: Number(amount),
       remainingAmount: Number(amount),
       appliedAmount: 0,
-      repaymentType: type,
-      installmentMonths: months,
-      monthlyInstallment: monthly,
-      installmentsPaid: 0,
       takenDate: new Date(takenDate),
       reason: reason || "",
       status: "open",
@@ -168,9 +128,6 @@ export const createAdvance = async (req, res) => {
       meta: {
         advanceId: String(advance._id),
         amount: Number(amount),
-        repaymentType: type,
-        installmentMonths: months,
-        monthlyInstallment: monthly,
         preparedBy: String(actorId(req.user) || ""),
         preparedByName: req.user?.name || "",
       },
@@ -249,23 +206,12 @@ export const getOpenAdvancesForEmployee = async (req, res) => {
       $or: statusFilter,
     }).sort({ takenDate: 1 });
 
-    const totalSuggested = rows.reduce((s, r) => {
-      const rem =
-        r.remainingAmount != null ? Number(r.remainingAmount) : Number(r.amount || 0);
-      if (r.repaymentType === "installment" && Number(r.monthlyInstallment) > 0) {
-        return s + Math.min(rem, Number(r.monthlyInstallment));
-      }
-      return s + rem;
-    }, 0);
+    const total = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
 
     return res.json({
       status: true,
       data: rows.map(serializeAdvance),
-      meta: {
-        totalOpen: rows.reduce((s, r) => s + Number(r.amount || 0), 0),
-        totalSuggestedDeduction: Math.round(totalSuggested * 100) / 100,
-        count: rows.length,
-      },
+      meta: { totalOpen: total, count: rows.length },
     });
   } catch (err) {
     console.error("getOpenAdvancesForEmployee", err);
@@ -313,44 +259,7 @@ export const updateAdvance = async (req, res) => {
       if (Number(req.body.amount) <= 0) {
         return res.status(400).json({ status: false, message: "Invalid amount" });
       }
-      const alreadyPaid = Math.max(
-        0,
-        Number(advance.amount || 0) - Number(advance.remainingAmount ?? advance.amount ?? 0)
-      );
       advance.amount = Number(req.body.amount);
-      // Keep remaining in sync for untouched open advances; clamp if already partially paid
-      advance.remainingAmount = Math.max(0, Number(req.body.amount) - alreadyPaid);
-    }
-    if (req.body.repaymentType != null || req.body.installmentMonths != null) {
-      const type =
-        String(req.body.repaymentType || advance.repaymentType || "full").toLowerCase() ===
-        "installment"
-          ? "installment"
-          : "full";
-      advance.repaymentType = type;
-      if (type === "installment") {
-        const months = Math.floor(
-          Number(
-            req.body.installmentMonths != null
-              ? req.body.installmentMonths
-              : advance.installmentMonths
-          )
-        );
-        if (!Number.isFinite(months) || months < 2) {
-          return res.status(400).json({
-            status: false,
-            message: "Installment advances require at least 2 months",
-          });
-        }
-        advance.installmentMonths = months;
-        advance.monthlyInstallment = computeMonthlyInstallment(
-          advance.amount,
-          months
-        );
-      } else {
-        advance.installmentMonths = null;
-        advance.monthlyInstallment = null;
-      }
     }
     if (req.body.takenDate) advance.takenDate = new Date(req.body.takenDate);
     if (req.body.reason !== undefined) advance.reason = req.body.reason;
