@@ -47,6 +47,21 @@
 
 ---
 
+## 👨‍💻 Author & credit
+
+**Created, developed, and maintained by [Metasebiyaw Asfaw](https://github.com/chapi1234) ([@chapi1234](https://github.com/chapi1234)).**
+
+All project authorship and engineering credit belong to the repository owner unless otherwise noted in a commit or contribution record.
+
+| | |
+|--|--|
+| **Author** | Metasebiyaw Asfaw |
+| **GitHub** | [chapi1234](https://github.com/chapi1234) |
+| **Repository** | [GDA-HR-Platform](https://github.com/chapi1234/GDA-HR-Platform) |
+| **Client / org** | Gamo Development Association (GammoDA) |
+
+---
+
 ## 📦 What the platform covers
 
 | Area | Capabilities |
@@ -237,8 +252,8 @@ Switch language in **Settings**.
 
 ## 📄 License
 
-Private software for **Gamo Development Association**.  
-All rights reserved unless otherwise agreed with the project owner.
+Private software built for **Gamo Development Association**.  
+**Copyright © Metasebiyaw Asfaw (@chapi1234).** All rights reserved unless otherwise agreed with the author.
 
 ---
 
@@ -248,10 +263,12 @@ All rights reserved unless otherwise agreed with the project owner.
 
 ### GammoDA HR Platform
 
+**Author: [Metasebiyaw Asfaw](https://github.com/chapi1234) · [@chapi1234](https://github.com/chapi1234)**
+
 **Employees · Sectors · Attendance · Leave · Payroll · Advances · Recruitment · Devices · Chat · ID Cards**
 
 <br />
 
-`Made with ❤️ for Gamo Development Association`
+`Built by Metasebiyaw Asfaw for Gamo Development Association`
 
 </div>

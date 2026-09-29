@@ -197,6 +197,14 @@ git config user.email "metasebiyawasfaw@gmail.com"
 
 ---
 
+## Author
+
+- **Metasebiyaw Asfaw** — [@chapi1234](https://github.com/chapi1234)  
+- Email: `metasebiyawasfaw@gmail.com`  
+- Full public credit also appears in `README.md` and `package.json` author fields.
+
+---
+
 ## Related docs
 
 - Public overview: [`README.md`](../README.md)  

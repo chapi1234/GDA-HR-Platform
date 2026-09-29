@@ -1,7 +1,10 @@
 {
-  "name": "vite_react_shadcn_ts",
+  "name": "gammoda-hr-frontend",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "author": "Metasebiyaw Asfaw (chapi1234) <metasebiyawasfaw@gmail.com>",
+  "description": "GammoDA HR Platform — React frontend by Metasebiyaw Asfaw (@chapi1234)",
+  "license": "UNLICENSED",
   "type": "module",
   "scripts": {
     "dev": "vite",

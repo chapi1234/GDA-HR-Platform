@@ -10,10 +10,10 @@
     "start": "nodemon index.js",
     "dev": "nodemon index.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
+  "keywords": ["hr", "gammoda", "payroll", "attendance"],
+  "author": "Metasebiyaw Asfaw (chapi1234) <metasebiyawasfaw@gmail.com>",
+  "license": "UNLICENSED",
+  "description": "GammoDA HR Platform — Express API by Metasebiyaw Asfaw (@chapi1234)",
   "dependencies": {
     "bcryptjs": "^3.0.2",
     "cloudinary": "^1.41.3",
